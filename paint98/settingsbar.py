@@ -5,7 +5,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gdk, GObject, Gtk  # noqa: E402
 
-from . import win98  # noqa: E402
+from . import symmetry, win98  # noqa: E402
 from .state import TOOL_NAMES  # noqa: E402
 
 
@@ -228,3 +228,80 @@ class ToolSettingsPanel(Gtk.Box):
             self.size.set_value(size)
         self._show(self.tolerance, tool == "fill")
         self.tolerance.set_value(st.tolerance)
+
+
+class SymmetryBar(Gtk.Box):
+    """Five small toggle buttons choosing the symmetry mode."""
+
+    __gsignals__ = {
+        "hint": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
+    }
+    BTN = 22
+
+    def __init__(self, state):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        self.state = state
+        self.set_valign(Gtk.Align.CENTER)
+        self.label = Gtk.Label(label="Symmetry:", xalign=0)
+        self.pack_start(self.label, False, False, 0)
+        self.strip = Gtk.DrawingArea()
+        self.strip.set_size_request(self.BTN * len(symmetry.MODES), self.BTN)
+        self.strip.set_has_tooltip(True)
+        self.strip.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.POINTER_MOTION_MASK
+                              | Gdk.EventMask.LEAVE_NOTIFY_MASK)
+        self.strip.connect("draw", self.on_draw)
+        self.strip.connect("button-press-event", self.on_press)
+        self.strip.connect("motion-notify-event", self.on_motion)
+        self.strip.connect("leave-notify-event", lambda *a: self.emit("hint", ""))
+        self.strip.connect("query-tooltip", self.on_tooltip)
+        self.pack_start(self.strip, False, False, 0)
+        state.connect("tool-changed", lambda *a: self.sync())
+        state.connect("options-changed", lambda *a: self.sync())
+        self.sync()
+
+    def enabled(self):
+        return self.state.tool in symmetry.TOOLS
+
+    def sync(self):
+        self.label.set_sensitive(self.enabled())
+        self.strip.queue_draw()
+
+    def mode_at(self, x):
+        i = int(x // self.BTN)
+        return symmetry.MODES[i][0] if 0 <= i < len(symmetry.MODES) else None
+
+    def on_press(self, w, ev):
+        mode = self.mode_at(ev.x)
+        if ev.button == 1 and mode and self.enabled():
+            self.state.set_option("symmetry", mode)
+        return True
+
+    def on_motion(self, w, ev):
+        mode = self.mode_at(ev.x)
+        self.emit("hint", symmetry.HINTS[mode] if mode else "")
+        return True
+
+    def on_tooltip(self, w, x, y, keyboard, tooltip):
+        mode = self.mode_at(x)
+        if not mode:
+            return False
+        tooltip.set_text(dict((m, n) for m, _, n in symmetry.MODES)[mode])
+        return True
+
+    def on_draw(self, w, cr):
+        on = self.enabled()
+        for i, (mode, _, _) in enumerate(symmetry.MODES):
+            x = i * self.BTN
+            active = on and self.state.symmetry == mode
+            if active:
+                win98.dither_fill(cr, x, 0, self.BTN, self.BTN)
+                win98.pressed(cr, x, 0, self.BTN, self.BTN, fill=False)
+            else:
+                win98.raised(cr, x, 0, self.BTN, self.BTN)
+            o = 1 if active else 0
+            if on:
+                symmetry.draw_icon(cr, mode, x + 3 + o, 3 + o)
+            else:
+                symmetry.draw_icon(cr, mode, x + 4, 4, win98.WHITE)
+                symmetry.draw_icon(cr, mode, x + 3, 3, win98.SHADOW)
+        return True

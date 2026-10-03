@@ -18,7 +18,9 @@ from .colorbox import ColorBox  # noqa: E402
 from .funpaints import solid  # noqa: E402
 from .document import Document, pixbuf_to_surface, surface_to_pixbuf  # noqa: E402
 from .state import DEFAULT_HELP, PaintState  # noqa: E402
-from .settingsbar import ToolSettingsPanel  # noqa: E402
+from .settingsbar import SymmetryBar, ToolSettingsPanel  # noqa: E402
+from .replay import Recorder, ReplayWindow, export_gif  # noqa: E402
+from . import symmetry  # noqa: E402
 from .textbar import TextToolbar  # noqa: E402
 from .toolbox import ToolBox  # noqa: E402
 from .win98 import Win98Window, message_box  # noqa: E402
@@ -232,11 +234,14 @@ class MainWindow(Win98Window):
         bottom.pack_start(self.colorbox, False, False, 0)
         self.settingsbar = ToolSettingsPanel(self.state)
         bottom.pack_end(self.settingsbar, False, False, 6)
+        self.symmetrybar = SymmetryBar(self.state)
+        bottom.pack_end(self.symmetrybar, False, False, 6)
         self.body.pack_start(bottom, False, False, 0)
 
         self.statusbar = self.build_statusbar()
         self.body.pack_start(self.statusbar, False, False, 0)
 
+        self.recorder = Recorder(self.canvas, self.doc)
         self.connect_signals()
         self.apply_view_settings()
         self.set_default_size(*self.settings.get("window_size", (780, 640)))
@@ -269,6 +274,8 @@ class MainWindow(Win98Window):
         pal = rgb_list(cfg.get("custom_palette") or [])
         if pal and len(pal) == 28:
             st.custom_palette = pal
+        if cfg.get("symmetry") in [m for m, _, _ in symmetry.MODES]:
+            st.symmetry = cfg["symmetry"]
         mode = cfg.get("palette_mode") or ("custom" if cfg.get("use_custom") else "original")
         if mode in ("original", "custom", "fun"):
             st.palette_mode = mode
@@ -294,6 +301,7 @@ class MainWindow(Win98Window):
     def store_tool_settings(self):
         st = self.state
         self.settings["custom_palette"] = ["%02x%02x%02x" % c for c in st.custom_palette]
+        self.settings["symmetry"] = st.symmetry
         self.settings["palette_mode"] = st.palette_mode
         self.settings["last_plain"] = st.last_plain
         self.settings.pop("use_custom", None)
@@ -304,6 +312,14 @@ class MainWindow(Win98Window):
         self.settings["sizes"] = {"pencil": st.pencil_size, "brush": st.brush_size,
                                   "brush_preset": st.brush, "eraser": st.eraser_px,
                                   "eraser_preset": st.eraser_size}
+
+    def sync_symmetry_checks(self):
+        for mode, _, _ in symmetry.MODES:
+            self.set_check("sym_" + mode, self.state.symmetry == mode)
+
+    def on_symmetry_item(self, name, active):
+        self.state.set_option("symmetry", name[4:])
+        self.sync_symmetry_checks()
 
     def sync_palette_checks(self):
         for mode in ("original", "custom", "fun"):
@@ -344,6 +360,9 @@ class MainWindow(Win98Window):
              "Prints the active document and sets printing options."),
             None,
             ("send", "S_end...", None, None, "Sends a picture by using electronic mail."),
+            None,
+            ("save_replay", "Save Rep_lay As...", self.on_save_replay, None,
+             "Saves an animated GIF that shows how the picture was drawn."),
             None,
             ("wall_tiled", "Set As _Wallpaper (Tiled)", lambda: self.on_wallpaper("wallpaper"), None,
              "Tiles this bitmap as the desktop wallpaper."),
@@ -387,6 +406,8 @@ class MainWindow(Win98Window):
                  "Shows or hides the thumbnail view of the picture.", "check"),
             ], None, "Zooms the picture."),
             ("view_bitmap", "_View Bitmap", self.on_view_bitmap, "<Control>f", "Displays the entire picture."),
+            ("replay", "_Replay...", self.on_replay, "<Control><Shift>r",
+             "Plays back how the picture was drawn."),
         ])
         self.add_menu(mb, "_Image", [
             ("flip", "_Flip/Rotate...", self.on_flip_rotate, "<Control>r",
@@ -408,6 +429,11 @@ class MainWindow(Win98Window):
              "Uses a previously saved palette of colors."),
             ("save_colors", "_Save Colors...", self.on_save_colors, None,
              "Saves the current palette of colors to a file."),
+            None,
+            ("symmetry", "S_ymmetry", [
+                ("sym_" + mode, label, self.on_symmetry_item, None, symmetry.HINTS[mode], "check")
+                for mode, label, _ in symmetry.MODES
+            ], None, "Repeats what you draw around the centre of the picture."),
             None,
             ("pal_original", "O_riginal Colors", self.on_palette_item, None,
              "Shows the original 28 colors.", "check"),
@@ -510,6 +536,7 @@ class MainWindow(Win98Window):
         self.set_check("grid", self.state.show_grid)
         self.set_check("opaque", not self.state.transparent)
         self.sync_palette_checks()
+        self.sync_symmetry_checks()
         self.set_check("v_textbar", self.settings.get("textbar", True))
 
     def refresh_recent(self):
@@ -622,6 +649,8 @@ class MainWindow(Win98Window):
         self.doc.connect("state-changed", self.refresh_sensitivity)
         self.state.connect("tool-changed", self.refresh_sensitivity)
         self.state.connect("palette-changed", self.on_palette_changed)
+        self.state.connect("options-changed", lambda *a: self.sync_symmetry_checks())
+        self.symmetrybar.connect("hint", lambda w, t: self.set_hint(t))
         self.refresh_sensitivity()
 
     def on_colorbox_press(self, w, ev):
@@ -663,6 +692,7 @@ class MainWindow(Win98Window):
         self.set_check("grid", self.state.show_grid)
         self.set_check("opaque", not self.state.transparent)
         self.sync_palette_checks()
+        self.sync_symmetry_checks()
 
     def on_toggle_view(self, name, active):
         if name == "v_textbar":
@@ -967,6 +997,28 @@ class MainWindow(Win98Window):
             self.thumbnail.show_all()
         else:
             self.thumbnail.hide()
+
+    def on_replay(self):
+        self.canvas.commit_all()
+        frames = self.recorder.snapshot()
+        ReplayWindow(self, frames, lambda win: self.save_replay(frames, win)).show_all()
+
+    def on_save_replay(self):
+        self.canvas.commit_all()
+        self.save_replay(self.recorder.snapshot(), self)
+
+    def save_replay(self, frames, parent):
+        base = os.path.splitext(self.doc.display_name)[0] or "untitled"
+        path = self.file_dialog("Save Replay As", Gtk.FileChooserAction.SAVE, base + "-replay.gif",
+                                filters=[("Animated GIF (*.gif)", ["*.gif"], ".gif")])
+        if not path:
+            return
+
+        def done(error):
+            if error is not None:
+                message_box(parent, "Paint", "Paint cannot save the replay.\n\n%s" % error, ("OK",))
+
+        export_gif(parent, frames, path, done)
 
     def on_view_bitmap(self):
         self.canvas.commit_all()

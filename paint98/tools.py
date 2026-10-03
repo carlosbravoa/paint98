@@ -10,7 +10,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("PangoCairo", "1.0")
 from gi.repository import Gdk, GLib, Pango, PangoCairo  # noqa: E402
 
-from . import imageops, win98  # noqa: E402
+from . import imageops, symmetry, win98  # noqa: E402
 from .funpaints import is_fun, set_paint, solid  # noqa: E402
 from .imageops import bresenham, disc_offsets, set_rgb, square_offsets, stamp_path  # noqa: E402
 from .state import AIRBRUSH_SIZES, BRUSH_SHAPES, MAGNIFY_LEVELS  # noqa: E402
@@ -97,6 +97,11 @@ class Tool:
     def other_color(self, button):
         return self.state.bg if button == 1 else self.state.fg
 
+    def symmetry_transforms(self):
+        if symmetry.active(self.state, self.name):
+            return symmetry.transforms(self.state.symmetry, self.doc.width, self.doc.height)
+        return [cairo.Matrix()]
+
     def context(self, surf=None):
         cr = cairo.Context(surf or self.doc.surface)
         cr.set_antialias(cairo.ANTIALIAS_NONE)
@@ -177,11 +182,14 @@ class StrokeTool(Tool):
         lcr = cairo.Context(self.layer)
         lcr.set_antialias(cairo.ANTIALIAS_NONE)
         set_paint(lcr, self.paint, progress=self.progress)
-        paint_dabs(lcr, pts, kind, size)
+        xs, ys = [], []
+        for m in self.symmetry_transforms():
+            copy = symmetry.map_points(pts, m)
+            paint_dabs(lcr, copy, kind, size)
+            xs += [p[0] for p in copy]
+            ys += [p[1] for p in copy]
         self.progress += math.dist(pts[0], pts[-1]) + 1
         r = size // 2 + 2
-        xs = [p[0] for p in pts]
-        ys = [p[1] for p in pts]
         self.composite((min(xs) - r, min(ys) - r, max(xs) + r + 1, max(ys) + r + 1))
 
     def composite(self, box):
@@ -597,6 +605,16 @@ class PreviewTool(Tool):
     def compose(self, target):
         layer = imageops.new_surface(self.doc.width, self.doc.height)
         self.render(self.context(layer))
+        mats = self.symmetry_transforms()
+        if len(mats) > 1:
+            sym = imageops.new_surface(self.doc.width, self.doc.height)
+            scr = cairo.Context(sym)
+            for m in mats:
+                scr.set_matrix(m)
+                scr.set_source_surface(layer, 0, 0)
+                scr.get_source().set_filter(cairo.FILTER_NEAREST)
+                scr.paint()
+            layer = sym
         cr = cairo.Context(target)
         cr.set_source_surface(layer, 0, 0)
         cr.paint_with_alpha(self.state.tool_opacity(self.name))
@@ -973,7 +991,7 @@ class SelectTool(Tool):
             sel.y = y - self.offset[1]
             if mods & SHIFT:
                 self.c.stamp_selection()
-            self.c.queue_draw()
+            self.c.picture_changed()
         elif self.mode == "resize" and sel is not None:
             ox, oy, ow, oh = self.orig
             x0, y0, x1, y1 = ox, oy, ox + ow, oy + oh
@@ -987,7 +1005,7 @@ class SelectTool(Tool):
                 y1 = max(y + 1, y0 + 1)
             sel.x, sel.y, sel.w, sel.h = x0, y0, x1 - x0, y1 - y0
             self.c.emit_size(sel.w, sel.h)
-            self.c.queue_draw()
+            self.c.picture_changed()
         elif self.mode == "new":
             self.drag_new(x, y)
 

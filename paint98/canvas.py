@@ -8,7 +8,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gdk, GLib, GObject, Gtk  # noqa: E402
 
-from . import imageops, pixmaps, win98  # noqa: E402
+from . import imageops, pixmaps, symmetry, win98  # noqa: E402
 from .selection import Selection  # noqa: E402
 from .tools import TOOL_CLASSES  # noqa: E402
 
@@ -26,6 +26,9 @@ class Canvas(Gtk.DrawingArea):
         "selection-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
         "text-box-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
         "context-menu": (GObject.SignalFlags.RUN_FIRST, None, ()),
+        # The visible picture changed without the document changing
+        # (shape previews, moving a selection).
+        "picture-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
     }
 
     def __init__(self, state, doc):
@@ -283,6 +286,20 @@ class Canvas(Gtk.DrawingArea):
     def set_preview(self, surf):
         self.preview = surf
         self.queue_draw()
+        self.emit("picture-changed")
+
+    def picture_changed(self):
+        self.queue_draw()
+        self.emit("picture-changed")
+
+    def composite_picture(self):
+        """The picture as currently shown: preview and floating selection."""
+        surf = imageops.copy_surface(self.preview or self.doc.surface)
+        sel = self._selection
+        if sel is not None and sel.floating:
+            cr = cairo.Context(surf)
+            sel.paint(cr, self.state.transparent, self.state.bg)
+        return surf
 
     def emit_size(self, w, h=0):
         if w is None:
@@ -477,6 +494,9 @@ class Canvas(Gtk.DrawingArea):
             for hx, hy in self._handle_points(sel.x, sel.y, sel.w, sel.h).values():
                 cr.rectangle(hx, hy, HANDLE, HANDLE)
             cr.fill()
+
+        if symmetry.active(self.state, self.state.tool):
+            symmetry.draw_guides(cr, self.state.symmetry, ORIGIN, ORIGIN, iw, ih, z)
 
         self.tool.draw_overlay(cr)
 

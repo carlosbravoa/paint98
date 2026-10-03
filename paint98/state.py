@@ -120,6 +120,7 @@ class PaintState(GObject.Object):
         self.line_width = 1
         self.fill_style = 0  # 0 outline, 1 outline+fill, 2 fill only
         self.show_grid = True
+        self.symmetry = "off"  # see symmetry.MODES
         self.font_family = "Arial"
         self.font_size = 10
         self.font_bold = False

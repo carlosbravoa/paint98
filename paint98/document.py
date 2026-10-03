@@ -45,6 +45,8 @@ class Document(GObject.Object):
         "changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
         "size-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
         "state-changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
+        # A different picture was started (New / Open).
+        "reset": (GObject.SignalFlags.RUN_FIRST, None, ()),
     }
 
     def __init__(self, width=640, height=480):
@@ -140,6 +142,7 @@ class Document(GObject.Object):
         self.emit("size-changed")
         self.emit("changed")
         self.emit("state-changed")
+        self.emit("reset")
 
     # -- files ---------------------------------------------------------------
     def load(self, path):
@@ -153,6 +156,7 @@ class Document(GObject.Object):
         self.emit("size-changed")
         self.emit("changed")
         self.emit("state-changed")
+        self.emit("reset")
 
     @staticmethod
     def format_for(path):
