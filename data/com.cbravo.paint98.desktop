@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Paint
+GenericName=Image Editor
+Comment=Create and edit drawings, the classic way
+Exec=paint98 %f
+Icon=com.cbravo.paint98
+Terminal=false
+Categories=Graphics;2DGraphics;RasterGraphics;GTK;
+MimeType=image/png;image/bmp;image/jpeg;image/tiff;image/gif;
+Keywords=draw;paint;mspaint;bitmap;pixel;

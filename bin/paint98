@@ -1,0 +1,12 @@
+#!/bin/sh
+# Launch Paint. Inside the snap, use Python, PyGObject and pycairo from the
+# GNOME platform snap that the gnome extension mounts at $SNAP/gnome-platform.
+if [ -n "$SNAP" ]; then
+    PLATFORM="$SNAP/gnome-platform/usr"
+    PY="$(ls "$PLATFORM"/bin/python3.* 2>/dev/null | grep -E 'python3\.[0-9]+$' | head -n 1)"
+    export PYTHONPATH="$SNAP/lib/paint98:$PLATFORM/lib/python3/dist-packages${PYTHONPATH:+:$PYTHONPATH}"
+    exec "$PY" -m paint98 "$@"
+fi
+HERE="$(dirname "$(readlink -f "$0")")"
+export PYTHONPATH="$HERE/..${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m paint98 "$@"

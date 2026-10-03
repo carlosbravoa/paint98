@@ -1,0 +1,49 @@
+name: paint98
+base: core24
+version: '1.0.0'
+title: Paint
+summary: The classic paint program, pixel for pixel, on the GNOME desktop
+description: |
+  Paint brings back the look and feel of the classic Windows 98 paint program:
+  the 3D grey chrome, the sixteen-tool tool box, the 28-colour palette and the
+  same menus and dialogs, built natively with GTK for GNOME.
+
+  Features:
+   * Free-form and rectangular selections with move, copy (Ctrl+drag),
+     smear (Shift+drag), stretch handles and transparent mode
+   * Eraser / colour eraser, flood fill, colour picker and magnifier
+   * Pencil, brush (12 shapes), airbrush and text with a fonts toolbar
+   * Line, curve, rectangle, polygon, ellipse and rounded rectangle with
+     outline / fill styles
+   * Flip/rotate, stretch/skew, invert colours, attributes, zoom with grid
+     and thumbnail, view bitmap
+   * Edit colours, load and save .pal palettes
+   * Opens and saves PNG, BMP, JPEG and TIFF; copy and paste with other apps
+   * Set your picture as the GNOME desktop wallpaper (tiled or centred)
+grade: stable
+confinement: strict
+icon: snap/gui/paint98.png
+
+platforms:
+  amd64:
+  arm64:
+
+apps:
+  paint98:
+    command: bin/paint98
+    extensions: [gnome]
+    plugs:
+      - home
+      - removable-media
+      - cups
+
+parts:
+  paint98:
+    plugin: nil
+    source: .
+    override-build: |
+      craftctl default
+      install -d "$CRAFT_PART_INSTALL/lib/paint98"
+      cp -r paint98 "$CRAFT_PART_INSTALL/lib/paint98/"
+      find "$CRAFT_PART_INSTALL/lib/paint98" -name __pycache__ -prune -exec rm -rf {} +
+      install -Dm755 bin/paint98 "$CRAFT_PART_INSTALL/bin/paint98"

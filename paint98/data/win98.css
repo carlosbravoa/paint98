@@ -1,0 +1,531 @@
+/*
+ * Classic 3D look for Paint.
+ *
+ * Everything inside a window with the "paint98" class is reset and restyled,
+ * so the result does not depend on the user's GTK theme.  Menus, tooltips
+ * and popups live in their own top-level windows and are styled globally;
+ * this stylesheet is only loaded into the Paint process.
+ */
+
+@define-color face #c0c0c0;
+@define-color light #dfdfdf;
+@define-color shadow #808080;
+@define-color dark #000000;
+@define-color highlight #000080;
+
+/* ---- reset -------------------------------------------------------------- */
+
+.paint98 *,
+menu, menu *,
+tooltip, tooltip *,
+window.popup > decoration {
+  all: unset;
+}
+
+.paint98, menu, .paint98 menu, tooltip {
+  font-family: "MS Sans Serif", "Microsoft Sans Serif", "Liberation Sans", Arial, "DejaVu Sans", sans-serif;
+  font-size: 8pt;
+  color: #000000;
+}
+
+/* ---- windows ------------------------------------------------------------- */
+
+window.paint98 {
+  background-color: transparent;
+}
+
+window.paint98 > decoration {
+  margin: 4px;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+window.paint98.maximized > decoration,
+window.paint98.fullscreen > decoration,
+window.paint98.tiled > decoration {
+  margin: 0;
+}
+
+.paint98 .win98-frame {
+  background-color: @face;
+  padding: 4px;
+  box-shadow: inset 1px 1px @light, inset -1px -1px @dark,
+              inset 2px 2px #ffffff, inset -2px -2px @shadow;
+}
+
+window.paint98.maximized .win98-frame {
+  padding: 2px 0 0 0;
+  box-shadow: none;
+}
+
+/* ---- title bar ------------------------------------------------------------ */
+
+.paint98 .win98-titlebar {
+  background-image: linear-gradient(to right, #000080, #1084d0);
+  padding: 2px 2px 2px 2px;
+  min-height: 14px;
+}
+
+.paint98 .win98-titlebar:backdrop {
+  background-image: linear-gradient(to right, #808080, #b5b5b5);
+}
+
+.paint98 .win98-titlebar > label {
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.paint98 .win98-titlebar:backdrop > label {
+  color: #c0c0c0;
+}
+
+/* ---- menu bar ------------------------------------------------------------- */
+
+.paint98 menubar {
+  padding: 1px 0 1px 0;
+}
+
+.paint98 menubar > menuitem {
+  padding: 2px 6px 3px 6px;
+}
+
+.paint98 menubar > menuitem:hover {
+  padding: 3px 5px 2px 7px;
+  box-shadow: inset 1px 1px @shadow, inset -1px -1px #ffffff;
+}
+
+.paint98 menubar > menuitem:disabled label {
+  color: @shadow;
+  text-shadow: 1px 1px #ffffff;
+}
+
+/* ---- popup menus ---------------------------------------------------------- */
+
+menu,
+.paint98 menu {
+  background-color: @face;
+  box-shadow: inset 1px 1px @light, inset -1px -1px @dark,
+              inset 2px 2px #ffffff, inset -2px -2px @shadow;
+}
+
+/* The bevel is drawn with item margins rather than menu padding: GTK offsets
+   submenus by the menu padding, which makes Wayland compositors dismiss them. */
+menu > menuitem,
+.paint98 menu > menuitem,
+menu > separator,
+.paint98 menu > separator {
+  margin-left: 3px;
+  margin-right: 3px;
+}
+
+menu > :first-child,
+.paint98 menu > :first-child {
+  margin-top: 3px;
+}
+
+menu > :last-child,
+.paint98 menu > :last-child {
+  margin-bottom: 3px;
+}
+
+menu menuitem,
+.paint98 menu menuitem {
+  padding: 3px 18px 3px 0;
+  min-height: 11px;
+}
+
+menu menuitem:hover,
+.paint98 menu menuitem:hover {
+  background-color: @highlight;
+}
+
+menu menuitem:hover label,
+.paint98 menu menuitem:hover label,
+menu menuitem:hover accelerator,
+.paint98 menu menuitem:hover accelerator {
+  color: #ffffff;
+}
+
+menu menuitem accelerator,
+.paint98 menu menuitem accelerator {
+  color: #000000;
+  margin-left: 22px;
+}
+
+menu menuitem:disabled label,
+.paint98 menu menuitem:disabled label,
+menu menuitem:disabled accelerator,
+.paint98 menu menuitem:disabled accelerator {
+  color: @shadow;
+  text-shadow: 1px 1px #ffffff;
+}
+
+menu menuitem:disabled:hover label,
+.paint98 menu menuitem:disabled:hover label,
+menu menuitem:disabled:hover accelerator,
+.paint98 menu menuitem:disabled:hover accelerator {
+  color: @shadow;
+  text-shadow: none;
+}
+
+menu menuitem.check-item.checked,
+.paint98 menu menuitem.check-item.checked {
+  background-image: url("menu-check.png");
+  background-repeat: no-repeat;
+  background-position: 7px center;
+}
+
+menu menuitem.check-item.checked:hover,
+.paint98 menu menuitem.check-item.checked:hover {
+  background-image: url("menu-check-white.png");
+}
+
+menu menuitem arrow,
+.paint98 menu menuitem arrow {
+  min-width: 4px;
+  min-height: 7px;
+  margin-right: -12px;
+  -gtk-icon-source: none;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-image: url("menu-arrow.png");
+}
+
+menu menuitem:hover arrow,
+.paint98 menu menuitem:hover arrow {
+  background-image: url("menu-arrow-white.png");
+}
+
+menu separator,
+.paint98 menu separator {
+  min-height: 2px;
+  margin-top: 3px;
+  margin-bottom: 3px;
+  box-shadow: inset 0 1px @shadow, inset 0 -1px #ffffff;
+}
+
+menu > arrow,
+.paint98 menu > arrow {
+  min-height: 16px;
+  background-color: @face;
+  -gtk-icon-source: none;
+}
+
+menu > arrow.top,
+.paint98 menu > arrow.top {
+  background-image: url("arrow-up.png");
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+menu > arrow.bottom,
+.paint98 menu > arrow.bottom {
+  background-image: url("arrow-down.png");
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+/* ---- tooltips ------------------------------------------------------------- */
+
+tooltip {
+  background-color: #ffffe1;
+  border: 1px solid #000000;
+  padding: 1px 3px;
+}
+
+/* ---- fields, separators, status bar ------------------------------------ */
+
+.paint98 .win98-field {
+  padding: 2px;
+  box-shadow: inset 1px 1px @shadow, inset -1px -1px #ffffff,
+              inset 2px 2px @dark, inset -2px -2px @light;
+}
+
+.paint98 .win98-field.white {
+  background-color: #ffffff;
+}
+
+.paint98 .win98-separator {
+  min-height: 2px;
+  box-shadow: inset 0 1px @shadow, inset 0 -1px #ffffff;
+}
+
+.paint98 .workspace,
+.paint98 .workspace viewport {
+  background-color: @shadow;
+}
+
+.paint98 .statusbar {
+  padding: 2px 0 0 0;
+  min-height: 18px;
+}
+
+.paint98 .status-text {
+  padding: 2px 3px;
+}
+
+.paint98 .status-panel {
+  padding: 2px 3px;
+  box-shadow: inset 1px 1px @shadow, inset -1px -1px #ffffff;
+}
+
+.paint98 .fonts-toolbar {
+  padding: 3px 4px;
+  box-shadow: inset 1px 1px #ffffff, inset -1px -1px @shadow;
+}
+
+/* ---- scroll bars ---------------------------------------------------------- */
+
+.paint98 scrollbar {
+  -GtkScrollbar-has-backward-stepper: true;
+  -GtkScrollbar-has-forward-stepper: true;
+  background-image: url("dither.png");
+  background-repeat: repeat;
+}
+
+.paint98 scrollbar.vertical slider {
+  min-width: 16px;
+  min-height: 8px;
+}
+
+.paint98 scrollbar.horizontal slider {
+  min-height: 16px;
+  min-width: 8px;
+}
+
+.paint98 scrollbar slider {
+  background-color: @face;
+  box-shadow: inset 1px 1px @light, inset -1px -1px @dark,
+              inset 2px 2px #ffffff, inset -2px -2px @shadow;
+}
+
+.paint98 scrollbar button {
+  min-width: 16px;
+  min-height: 16px;
+  -gtk-icon-source: none;
+  background-color: @face;
+  background-repeat: no-repeat;
+  box-shadow: inset 1px 1px @light, inset -1px -1px @dark,
+              inset 2px 2px #ffffff, inset -2px -2px @shadow;
+}
+
+.paint98 scrollbar button:active {
+  box-shadow: inset 1px 1px @shadow, inset -1px -1px @shadow;
+}
+
+.paint98 scrollbar.vertical button { background-position: 4px 6px; }
+.paint98 scrollbar.vertical button:active { background-position: 5px 7px; }
+.paint98 scrollbar.horizontal button { background-position: 6px 4px; }
+.paint98 scrollbar.horizontal button:active { background-position: 7px 5px; }
+
+.paint98 scrollbar.vertical button.up { background-image: url("arrow-up.png"); }
+.paint98 scrollbar.vertical button.down { background-image: url("arrow-down.png"); }
+.paint98 scrollbar.horizontal button.up { background-image: url("arrow-left.png"); }
+.paint98 scrollbar.horizontal button.down { background-image: url("arrow-right.png"); }
+.paint98 scrollbar.vertical button.up:disabled { background-image: url("arrow-up-disabled.png"); }
+.paint98 scrollbar.vertical button.down:disabled { background-image: url("arrow-down-disabled.png"); }
+.paint98 scrollbar.horizontal button.up:disabled { background-image: url("arrow-left-disabled.png"); }
+.paint98 scrollbar.horizontal button.down:disabled { background-image: url("arrow-right-disabled.png"); }
+
+.paint98 scrolledwindow junction {
+  background-color: @face;
+}
+
+/* ---- dialogs: buttons, entries, radios, checks, frames ------------------ */
+
+.paint98 label:disabled {
+  color: @shadow;
+  text-shadow: 1px 1px #ffffff;
+}
+
+.paint98 button.win98 {
+  min-width: 59px;
+  min-height: 15px;
+  padding: 4px 8px;
+  background-color: @face;
+  box-shadow: inset -1px -1px @dark, inset 1px 1px #ffffff,
+              inset -2px -2px @shadow, inset 2px 2px @light;
+}
+
+.paint98 button.win98.default {
+  box-shadow: inset 0 0 0 1px @dark,
+              inset -2px -2px @dark, inset 2px 2px #ffffff,
+              inset -3px -3px @shadow, inset 3px 3px @light;
+}
+
+.paint98 button.win98:focus {
+  outline-color: #000000;
+  outline-style: dotted;
+  outline-width: 1px;
+  outline-offset: -5px;
+}
+
+.paint98 button.win98:active {
+  padding: 5px 7px 3px 9px;
+  box-shadow: inset 0 0 0 1px @dark, inset 0 0 0 2px @shadow;
+}
+
+.paint98 button.win98:disabled label {
+  color: @shadow;
+  text-shadow: 1px 1px #ffffff;
+}
+
+.paint98 button.toolbutton {
+  min-width: 18px;
+  min-height: 18px;
+  padding: 1px 2px;
+  background-color: @face;
+  box-shadow: inset -1px -1px @shadow, inset 1px 1px #ffffff;
+}
+
+.paint98 button.toolbutton:checked,
+.paint98 button.toolbutton:active {
+  padding: 2px 1px 0 3px;
+  background-image: url("dither.png");
+  background-repeat: repeat;
+  box-shadow: inset 1px 1px @shadow, inset -1px -1px #ffffff;
+}
+
+.paint98 entry {
+  background-color: #ffffff;
+  padding: 3px 4px;
+  min-height: 13px;
+  box-shadow: inset 1px 1px @shadow, inset -1px -1px #ffffff,
+              inset 2px 2px @dark, inset -2px -2px @light;
+}
+
+.paint98 entry:disabled {
+  background-color: @face;
+  color: @shadow;
+}
+
+.paint98 entry selection,
+.paint98 entry selection:focus {
+  background-color: @highlight;
+  color: #ffffff;
+}
+
+.paint98 radiobutton,
+.paint98 checkbutton {
+  padding: 1px 0;
+}
+
+.paint98 radiobutton:focus label,
+.paint98 checkbutton:focus label {
+  outline-color: #000000;
+  outline-style: dotted;
+  outline-width: 1px;
+  outline-offset: 0;
+}
+
+.paint98 radiobutton radio {
+  min-width: 12px;
+  min-height: 12px;
+  margin-right: 5px;
+  -gtk-icon-source: none;
+  background-image: url("radio.png");
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.paint98 radiobutton radio:checked { background-image: url("radio-checked.png"); }
+.paint98 radiobutton radio:disabled { background-image: url("radio-disabled.png"); }
+.paint98 radiobutton radio:checked:disabled { background-image: url("radio-checked-disabled.png"); }
+
+.paint98 checkbutton check {
+  min-width: 13px;
+  min-height: 13px;
+  margin-right: 5px;
+  -gtk-icon-source: none;
+  background-image: url("check.png");
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.paint98 checkbutton check:checked { background-image: url("check-checked.png"); }
+.paint98 checkbutton check:disabled { background-image: url("check-disabled.png"); }
+.paint98 checkbutton check:checked:disabled { background-image: url("check-checked-disabled.png"); }
+
+.paint98 frame > border {
+  border: 1px solid @shadow;
+  box-shadow: 1px 1px #ffffff, inset 1px 1px #ffffff;
+  margin-right: 1px;
+  margin-bottom: 1px;
+}
+
+.paint98 frame > label {
+  padding: 0 3px;
+  margin-left: 6px;
+}
+
+/* ---- combo boxes ---------------------------------------------------------- */
+
+.paint98 combobox button.combo {
+  background-color: #ffffff;
+  padding: 2px 2px 2px 3px;
+  box-shadow: inset 1px 1px @shadow, inset -1px -1px #ffffff,
+              inset 2px 2px @dark, inset -2px -2px @light;
+}
+
+.paint98 combobox arrow {
+  min-width: 16px;
+  min-height: 16px;
+  margin-left: 4px;
+  -gtk-icon-source: none;
+  background-color: @face;
+  background-image: url("arrow-down.png");
+  background-repeat: no-repeat;
+  background-position: 4px 6px;
+  box-shadow: inset 1px 1px @light, inset -1px -1px @dark,
+              inset 2px 2px #ffffff, inset -2px -2px @shadow;
+}
+
+/* ---- drop-down lists (font box) -------------------------------------- */
+
+.paint98 .dropdown-field {
+  background-color: #ffffff;
+  padding: 2px 2px 2px 4px;
+  box-shadow: inset 1px 1px @shadow, inset -1px -1px #ffffff,
+              inset 2px 2px @dark, inset -2px -2px @light;
+}
+
+.paint98 .dropdown-arrow {
+  min-width: 16px;
+  min-height: 16px;
+  margin-left: 2px;
+  background-color: @face;
+  background-image: url("arrow-down.png");
+  background-repeat: no-repeat;
+  background-position: 4px 6px;
+  box-shadow: inset 1px 1px @light, inset -1px -1px @dark,
+              inset 2px 2px #ffffff, inset -2px -2px @shadow;
+}
+
+.paint98 popover.dropdown-popup {
+  background-color: transparent;
+}
+
+.paint98 popover.dropdown-popup scrolledwindow {
+  background-color: #ffffff;
+  border: 1px solid #000000;
+}
+
+.paint98 popover.dropdown-popup list row {
+  padding: 1px 3px;
+}
+
+/* ---- lists ------------------------------------------------------------------ */
+
+.paint98 list {
+  background-color: #ffffff;
+}
+
+.paint98 list row {
+  padding: 1px 0;
+}
+
+.paint98 list row:selected {
+  background-color: @highlight;
+}
+
+.paint98 list row:selected label {
+  color: #ffffff;
+}
