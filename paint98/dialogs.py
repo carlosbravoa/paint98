@@ -292,6 +292,20 @@ def _hex(h):
     return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
 
 
+def parse_hex(text):
+    """'#FF8040', 'ff8040', '#f84' -> (r, g, b); None if not a colour."""
+    t = text.strip().lstrip("#")
+    if len(t) == 3:
+        t = "".join(c * 2 for c in t)
+    if len(t) != 6:
+        return None
+    try:
+        v = int(t, 16)
+    except ValueError:
+        return None
+    return ((v >> 16) & 255, (v >> 8) & 255, v & 255)
+
+
 def rgb_to_hsl240(rgb):
     h, l, s = colorsys.rgb_to_hls(*(c / 255 for c in rgb))
     return round(h * 239), round(s * 240), round(l * 240)
@@ -367,8 +381,24 @@ class EditColorsDialog(Win98Dialog):
         left.pack_start(lbl, False, False, 6)
         self.custom_grid = SwatchGrid(CUSTOM_COLORS, 8, self.on_swatch)
         left.pack_start(self.custom_grid, False, False, 0)
+        # Hex input: type or paste #RRGGBB (also RGB or #RGB).
+        hex_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        lbl = Gtk.Label.new_with_mnemonic("He_x:")
+        self.hex_entry = Gtk.Entry()
+        self.hex_entry.set_width_chars(8)
+        self.hex_entry.set_max_length(7)
+        self.hex_entry.set_activates_default(True)
+        lbl.set_mnemonic_widget(self.hex_entry)
+        self.hex_entry.connect("changed", self.on_hex)
+        self.hex_swatch = Gtk.DrawingArea()
+        self.hex_swatch.set_size_request(30, 20)
+        self.hex_swatch.connect("draw", self.draw_hex_swatch)
+        hex_row.pack_start(lbl, False, False, 0)
+        hex_row.pack_start(self.hex_entry, False, False, 0)
+        hex_row.pack_start(self.hex_swatch, False, False, 0)
+        left.pack_start(hex_row, False, False, 6)
         self.define_btn = make_button("_Define Custom Colors >>", self.on_define)
-        left.pack_start(self.define_btn, False, False, 8)
+        left.pack_start(self.define_btn, False, False, 4)
         bb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         ok = make_button("OK", lambda: self.finish(OK), default=True)
         bb.pack_start(ok, False, False, 0)
@@ -450,7 +480,25 @@ class EditColorsDialog(Win98Dialog):
         for k, e in self.entries.items():
             if e.get_text() != str(vals[k]):
                 e.set_text(str(vals[k]))
+        hex_text = "#%02X%02X%02X" % tuple(self.color)
+        if self.hex_entry.get_text().upper() != hex_text and parse_hex(self.hex_entry.get_text()) != self.color:
+            self.hex_entry.set_text(hex_text)
+        self.hex_swatch.queue_draw()
         self._syncing = False
+
+    def on_hex(self, entry):
+        if self._syncing:
+            return
+        rgb = parse_hex(entry.get_text())
+        if rgb is not None and rgb != self.color:
+            # _sync_entries leaves the hex text alone while it already
+            # spells this colour, so typing isn't interrupted.
+            self._set_rgb(rgb)
+
+    def draw_hex_swatch(self, w, cr):
+        width, height = w.get_allocated_width(), w.get_allocated_height()
+        win98.sunken_field(cr, 0, 0, width, height, tuple(c / 255 for c in self.color))
+        return True
 
     def on_entry(self, e, key):
         if self._syncing:

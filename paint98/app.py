@@ -2,6 +2,7 @@
 
 import os
 import sys
+import time
 
 import gi
 
@@ -42,12 +43,41 @@ class PaintApp(Gtk.Application):
         Gtk.Application.do_startup(self)
         load_css()
 
+    _checked_recovery = False
+
     def new_window(self, path=None):
         from .window import MainWindow
         win = MainWindow(self, path)
         win.show_all()
         win.present()
+        if not self._checked_recovery:
+            self._checked_recovery = True
+            GLib.idle_add(self.offer_recovery, win)
         return win
+
+    def offer_recovery(self, win):
+        """After a crash, offer the pictures that were autosaved."""
+        from . import autosave
+        from .win98 import message_box
+        from .window import display_path
+        for sid, info, png in autosave.find_orphans():
+            name = info.get("filename")
+            name = display_path(os.path.basename(name)) if isinstance(name, str) else "untitled"
+            when = info.get("time")
+            when = time.strftime("%d/%m/%Y %H:%M", time.localtime(when)) \
+                if isinstance(when, (int, float)) else "an earlier session"
+            res = message_box(win, "Paint98",
+                              "Paint98 found an unsaved picture (%s) from %s.\n"
+                              "It was not saved before Paint98 closed.\n\n"
+                              "Do you want to recover it?" % (name, when),
+                              ("Yes", "No"), icon="info")
+            if res == 0:
+                doc = win.doc
+                untouched = not doc.modified and doc.filename is None and not doc.undo_stack
+                target = win if untouched else self.new_window()
+                target.recover(png, info)
+            autosave.discard(sid)
+        return False
 
     def do_activate(self):
         self.new_window()

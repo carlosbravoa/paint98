@@ -56,6 +56,7 @@ class Document(GObject.Object):
         self.modified = False
         self.monochrome = False  # converted to black and white (Attributes)
         self.undo_stack = []
+        self.base_label = "New Picture"
         self.redo_stack = []
         self.surface = imageops.new_surface(width, height, (255, 255, 255))
 
@@ -74,19 +75,39 @@ class Document(GObject.Object):
         return "untitled"
 
     # -- history -----------------------------------------------------------
-    def push_undo(self):
-        self.undo_stack.append(imageops.copy_surface(self.surface))
-        del self.undo_stack[:-UNDO_LEVELS]
+    # undo_stack holds (picture before a step, step name); redo_stack holds
+    # (picture after an undone step, step name), next redo last.
+    # Names the step being recorded when the caller doesn't (set by the
+    # window to the current tool's name).
+    default_label = staticmethod(lambda: "Change")
+
+    def push_undo(self, label=None):
+        self.undo_stack.append((imageops.copy_surface(self.surface), label or self.default_label()))
+        if len(self.undo_stack) > UNDO_LEVELS:
+            del self.undo_stack[:-UNDO_LEVELS]
+            self.base_label = "Earlier steps"
         self.redo_stack.clear()
         self.set_modified(True)
         self.emit("state-changed")
+
+    def last_snapshot(self):
+        """The picture as it was before the step now being made."""
+        return self.undo_stack[-1][0]
+
+    def history(self):
+        """(step names, index of the current step). Index 0 is the starting
+        picture; names after the current index are undone (redoable) steps."""
+        names = [self.base_label] + [label for _, label in self.undo_stack]
+        names += [label for _, label in reversed(self.redo_stack)]
+        return names, len(self.undo_stack)
 
     def _swap(self, src, dst):
         if not src:
             return False
         old_size = (self.width, self.height)
-        dst.append(self.surface)
-        self.surface = src.pop()
+        surface, label = src.pop()
+        dst.append((self.surface, label))
+        self.surface = surface
         if old_size != (self.width, self.height):
             self.emit("size-changed")
         self.set_modified(True)
@@ -100,7 +121,7 @@ class Document(GObject.Object):
         if not self.undo_stack:
             return
         old_size = (self.width, self.height)
-        self.surface = self.undo_stack.pop()
+        self.surface = self.undo_stack.pop()[0]
         if old_size != (self.width, self.height):
             self.emit("size-changed")
         self.emit("changed")
@@ -128,9 +149,9 @@ class Document(GObject.Object):
         self.set_modified(True)
         self.emit("changed")
 
-    def replace_surface(self, surf, undo=True):
+    def replace_surface(self, surf, undo=True, label=None):
         if undo:
-            self.push_undo()
+            self.push_undo(label)
         size_changed = (surf.get_width(), surf.get_height()) != (self.width, self.height)
         self.surface = surf
         if size_changed:
@@ -145,12 +166,13 @@ class Document(GObject.Object):
         cr = cairo.Context(new)
         cr.set_source_surface(self.surface, 0, 0)
         cr.paint()
-        self.replace_surface(new)
+        self.replace_surface(new, label="Resize Picture")
 
     def new(self, w, h):
         self.surface = imageops.new_surface(w, h, (255, 255, 255))
         self.filename = None
         self.monochrome = False
+        self.base_label = "New Picture"
         self.undo_stack.clear()
         self.redo_stack.clear()
         self.modified = False
@@ -173,9 +195,25 @@ class Document(GObject.Object):
         self.surface = pixbuf_to_surface(pb)
         self.filename = path
         self.monochrome = False
+        self.base_label = "Open"
         self.undo_stack.clear()
         self.redo_stack.clear()
         self.modified = False
+        self.emit("size-changed")
+        self.emit("changed")
+        self.emit("state-changed")
+        self.emit("reset")
+
+    def recover(self, png_path, filename=None):
+        """Load a recovery copy as unsaved work (it still needs saving)."""
+        surf = cairo.ImageSurface.create_from_png(png_path)
+        self.surface = imageops.copy_surface(surf)
+        self.filename = filename
+        self.monochrome = False
+        self.base_label = "Recovered"
+        self.undo_stack.clear()
+        self.redo_stack.clear()
+        self.modified = True
         self.emit("size-changed")
         self.emit("changed")
         self.emit("state-changed")

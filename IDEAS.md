@@ -4,7 +4,7 @@ Features that keep the classic look and feel but make Paint surprising and
 modern. New tools live in the tool box options, settings in the panel next to
 the colour box, and anything bigger in a classic-style dialog or tool window.
 
-Status: `[ ]` to do, `[~]` in progress, `[x]` done.
+Status: `[ ]` to do, `[~]` in progress, `[x]` done, `[-]` won't do.
 
 ## Top picks
 
@@ -31,8 +31,9 @@ Status: `[ ]` to do, `[~]` in progress, `[x]` done.
    stickers, ~300 colour emoji in 7 categories, and My Stickers made with
    Edit → Save Selection as Sticker; drag to stamp a trail; works with Size,
    Opacity and Symmetry.)*
-5. [ ] **Coloring book.** File → New from Coloring Page… opens line drawings
-   made for the fill tool.
+5. [-] **Coloring book.** File → New from Coloring Page… opens line drawings
+   made for the fill tool. *(Won't do: it's a content bundle rather than a
+   painting feature, and the Sticker Book already covers ready-made fun.)*
 6. [ ] **Stroke smoothing.** A stabiliser slider that steadies shaky lines.
 
 ## Invisible until you need it
@@ -40,11 +41,14 @@ Status: `[ ]` to do, `[~]` in progress, `[x]` done.
 7. [ ] **Pick a colour from anywhere on screen.** Eyedropper that samples
    other windows and the desktop through the desktop portal (works in the snap).
 8. [ ] **Transparent background.** Save PNGs with transparency.
-9. [ ] **Autosave and recovery.** "Paint found an unsaved picture…" after a
-   crash, in a classic dialog.
+9. [x] **Autosave and recovery.** "Paint found an unsaved picture…" after a
+   crash, in a classic dialog. *(Done: unsaved work is copied every 30 s in a
+   background thread; a per-window lock tells crashed sessions from running
+   ones; the next start offers to recover each one.)*
 10. [ ] **Pen tablet pressure.** Size and opacity follow stylus pressure.
-11. [ ] **History window.** A small tool window listing every step; click to
-    jump back several steps at once.
+11. [x] **History window.** A small tool window listing every step; click to
+    jump back several steps at once. *(Done: View → History (Ctrl+H); steps
+    are named after the tool or command, undone steps are greyed.)*
 
 ## Nostalgic surprises
 
@@ -57,7 +61,7 @@ Status: `[ ]` to do, `[~]` in progress, `[x]` done.
 
 ## Bigger projects
 
-15. [ ] **Layers**, presented in a classic tool window.
+15. [ ] **Layers**, presented in a classic tool window. **← next**
 16. [ ] **Flipbook animation** with onion skinning and a frame strip,
     exported as GIF (shares the GIF encoder with Replay).
 
@@ -66,3 +70,6 @@ Status: `[ ]` to do, `[~]` in progress, `[x]` done.
 17. [ ] Movable symmetry centre (drag the centre point on the canvas).
 18. [ ] Rewrite git history to drop `paint.png` from the first commit before
     making the repository public.
+19. [x] **Hex colour input.** Type or paste `#RRGGBB` (or `#RGB`) in Edit
+    Colors; double-click the foreground/background swatch to edit that colour
+    directly.

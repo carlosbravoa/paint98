@@ -231,7 +231,7 @@ class StrokeTool(Tool):
 
     def begin_stroke(self, paint):
         self.doc.push_undo()
-        self.base = self.doc.undo_stack[-1]
+        self.base = self.doc.last_snapshot()
         self.layer = imageops.new_surface(self.doc.width, self.doc.height)
         self.paint = paint
         self.alpha = self.state.tool_opacity(self.name)
@@ -1263,7 +1263,7 @@ class TextTool(Tool):
             return
         if self.text.strip():
             surf, _ = self.render_surface()
-            self.doc.push_undo()
+            self.doc.push_undo("Text")
             cr = cairo.Context(self.doc.surface)
             cr.set_source_surface(surf, self.box[0], self.box[1])
             cr.paint_with_alpha(self.state.tool_opacity("text"))
@@ -1383,7 +1383,7 @@ class StickerTool(Tool):
         if button != 1:
             return
         self.doc.push_undo()
-        self.base = self.doc.undo_stack[-1]
+        self.base = self.doc.last_snapshot()
         self.layer = imageops.new_surface(self.doc.width, self.doc.height)
         self.last = None
         self.stamp(x, y)

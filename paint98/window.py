@@ -17,7 +17,9 @@ from .canvas import Canvas  # noqa: E402
 from .colorbox import ColorBox  # noqa: E402
 from .funpaints import set_paint, solid  # noqa: E402
 from .document import Document, pixbuf_to_surface, surface_to_pixbuf  # noqa: E402
-from .state import DEFAULT_HELP, PaintState  # noqa: E402
+from .state import DEFAULT_HELP, TOOL_NAMES, PaintState  # noqa: E402
+from .autosave import AutoSaver  # noqa: E402
+from .history import HistoryWindow  # noqa: E402
 from .settingsbar import SymmetryBar, ToolSettingsPanel  # noqa: E402
 from .replay import Recorder, ReplayWindow, export_gif  # noqa: E402
 from .stickerbook import StickerBook  # noqa: E402
@@ -360,6 +362,11 @@ class MainWindow(Win98Window):
         self.body.pack_start(self.statusbar, False, False, 0)
 
         self.recorder = Recorder(self.canvas, self.doc)
+        # Name undo steps after the tool that made them (History window).
+        self.doc.default_label = lambda: TOOL_NAMES.get(self.state.tool, "Change")
+        self.history_window = None
+        self.autosaver = AutoSaver(self.canvas, self.doc)
+        self.connect("destroy", lambda *a: self.autosaver.close())
         self.connect_signals()
         self.apply_view_settings()
         self.set_default_size(*self.settings.get("window_size", (780, 640)))
@@ -542,6 +549,8 @@ class MainWindow(Win98Window):
             ("view_bitmap", "_View Bitmap", self.on_view_bitmap, "<Control>f", "Displays the entire picture."),
             ("replay", "_Replay...", self.on_replay, "<Control><Shift>r",
              "Plays back how the picture was drawn."),
+            ("v_history", "_History", self.on_toggle_view, "<Control>h",
+             "Shows every step of the picture; click one to go back to it.", "check"),
             ("sticker_book", "Stic_ker Book...", self.show_sticker_book, "<Control>b",
              "Opens the Sticker Book to pick a sticker."),
         ])
@@ -781,6 +790,7 @@ class MainWindow(Win98Window):
         self.colorbox.connect("hint", lambda w, t: self.set_hint(t))
         self.colorbox.connect("edit-color", lambda w, i: self.on_edit_colors(i))
         self.colorbox.connect("palette-index", self.on_palette_index)
+        self.colorbox.connect("edit-indicator", self.on_edit_indicator)
         self.canvas.connect("pointer-info", self.on_pointer)
         self.canvas.connect("size-info", self.on_size_info)
         self.canvas.connect("text-box-changed", lambda *a: self.update_textbar())
@@ -801,6 +811,14 @@ class MainWindow(Win98Window):
 
     def on_palette_index(self, colorbox, index):
         self.palette_index = index
+
+    def on_edit_indicator(self, colorbox, which):
+        """Edit the current foreground/background colour directly."""
+        current = self.state.fg if which == "fg" else self.state.bg
+        dlg = dialogs.EditColorsDialog(self, solid(current))
+        if dlg.run() == dialogs.OK:
+            (self.state.set_fg if which == "fg" else self.state.set_bg)(dlg.color)
+        dlg.destroy()
 
     def on_key(self, w, ev):
         if self.canvas.handle_key(ev):
@@ -853,6 +871,14 @@ class MainWindow(Win98Window):
         self.sync_symmetry_checks()
 
     def on_toggle_view(self, name, active):
+        if name == "v_history":
+            if active:
+                if self.history_window is None:
+                    self.history_window = HistoryWindow(self)
+                self.history_window.show_window()
+            elif self.history_window is not None:
+                self.history_window.hide()
+            return
         if name == "v_textbar":
             self.settings["textbar"] = active
             self.update_textbar()
@@ -902,6 +928,32 @@ class MainWindow(Win98Window):
             self.canvas.discard_pending()
             return True
         return False
+
+    def jump_to_history(self, index):
+        """Undo or redo until the picture is at step `index`."""
+        names, current = self.doc.history()
+        index = max(0, min(index, len(names) - 1))
+        while current != index:
+            if current > index:
+                self.canvas.undo()
+            else:
+                self.canvas.redo()
+            _, now = self.doc.history()
+            if now == current:
+                break  # nothing more to undo/redo
+            current = now
+
+    def recover(self, png_path, info):
+        """Open an autosaved recovery copy as unsaved work."""
+        filename = info.get("filename") if isinstance(info.get("filename"), str) else None
+        try:
+            self.canvas.discard_pending()
+            self.doc.recover(png_path, filename)
+        except Exception as e:  # a damaged recovery file must not stop start-up
+            self.error("Paint98 could not recover the picture.\n\n%s" % e)
+            return False
+        self.autosaver.save_now()
+        return True
 
     def on_delete(self, *a):
         if not self.confirm_discard():
@@ -968,6 +1020,7 @@ class MainWindow(Win98Window):
             return
         self.canvas.discard_selection()
         self.doc.new(self.doc.width, self.doc.height)
+        self.autosaver.clear()
 
     def on_open(self):
         if not self.confirm_discard():
@@ -992,6 +1045,7 @@ class MainWindow(Win98Window):
             return False
         self.canvas.discard_selection()
         self.add_recent(path)
+        self.autosaver.clear()
         return False
 
     def on_save(self):
@@ -1040,6 +1094,8 @@ class MainWindow(Win98Window):
             self.error("Paint98 cannot save this file.\n\n%s" % (getattr(e, "message", None) or e))
             return False
         self.add_recent(path)
+        if not self.canvas.has_pending_work():
+            self.autosaver.clear()
         return True
 
     # printing
@@ -1146,7 +1202,7 @@ class MainWindow(Win98Window):
     def on_clear_selection(self):
         if self.canvas.selection is None:
             return
-        self.canvas.lift_selection()
+        self.canvas.lift_selection(label="Clear Selection")
         self.canvas.discard_selection()
 
     def on_select_all(self):
@@ -1275,30 +1331,30 @@ class MainWindow(Win98Window):
             self.error("Paint98 does not have enough memory for this picture.\n\n%s" % e)
         return False
 
-    def apply_transform(self, fn):
-        return self.guard(self._apply_transform, fn)
+    def apply_transform(self, fn, label="Change"):
+        return self.guard(self._apply_transform, fn, label)
 
-    def _apply_transform(self, fn):
+    def _apply_transform(self, fn, label):
         sel = self.canvas.selection
         if sel is not None:
             # Compute first, so a failure leaves the selection untouched.
             sel.bake()
             result = fn(imageops.copy_surface(sel.content))
-            self.canvas.lift_selection()
+            self.canvas.lift_selection(label=label)
             sel.set_content(result)
             self.canvas.picture_changed()
         else:
             self.canvas.commit_all()
-            self.doc.replace_surface(fn(imageops.copy_surface(self.doc.surface)))
+            self.doc.replace_surface(fn(imageops.copy_surface(self.doc.surface)), label=label)
 
     def on_flip_rotate(self):
         dlg = dialogs.FlipRotateDialog(self)
         if dlg.run() == dialogs.OK:
             kind, arg = dlg.result()
             if kind == "flip":
-                self.apply_transform(lambda s: imageops.flip(s, arg))
+                self.apply_transform(lambda s: imageops.flip(s, arg), "Flip")
             else:
-                self.apply_transform(lambda s: imageops.rotate(s, arg))
+                self.apply_transform(lambda s: imageops.rotate(s, arg), "Rotate")
         dlg.destroy()
 
     def on_stretch_skew(self):
@@ -1316,7 +1372,7 @@ class MainWindow(Win98Window):
                     s = imageops.skew(s, kh, kv, bg)
                 return s
 
-            self.apply_transform(fn)
+            self.apply_transform(fn, "Stretch/Skew")
         dlg.destroy()
 
     def on_invert(self):
@@ -1324,7 +1380,7 @@ class MainWindow(Win98Window):
             imageops.invert(s)
             return s
 
-        self.apply_transform(fn)
+        self.apply_transform(fn, "Invert Colors")
 
     def selection_sticker_surface(self):
         sel = self.canvas.selection
@@ -1363,7 +1419,7 @@ class MainWindow(Win98Window):
         sel = self.canvas.selection
         if sel is None:
             return
-        self.canvas.lift_selection()
+        self.canvas.lift_selection(label="Recolor Selection")
         sel.bake()
         src = sel.content
         w, h = src.get_width(), src.get_height()
@@ -1401,7 +1457,7 @@ class MainWindow(Win98Window):
                 def fn(s):
                     imageops.to_black_and_white(s)
                     return s
-                if self.apply_transform(fn):
+                if self.apply_transform(fn, "Black and White"):
                     self.doc.monochrome = True
         elif colors:
             self.doc.monochrome = False
@@ -1412,7 +1468,7 @@ class MainWindow(Win98Window):
             self.on_clear_selection()
             return
         self.canvas.commit_all()
-        self.doc.push_undo()
+        self.doc.push_undo("Clear Image")
         cr = cairo.Context(self.doc.surface)
         imageops.set_rgb(cr, self.state.bg)
         cr.paint()

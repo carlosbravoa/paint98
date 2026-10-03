@@ -25,6 +25,8 @@ class ColorBox(Gtk.DrawingArea):
         "edit-color": (GObject.SignalFlags.RUN_FIRST, None, (int,)),
         # The palette cell last clicked (used by Options > Edit Colors).
         "palette-index": (GObject.SignalFlags.RUN_FIRST, None, (int,)),
+        # Double-click on the foreground ("fg") or background ("bg") swatch.
+        "edit-indicator": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
         "hint": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
     }
 
@@ -51,6 +53,16 @@ class ColorBox(Gtk.DrawingArea):
         row = int((y - PAL_Y) // CELL)
         if x >= PAL_X and y >= PAL_Y and 0 <= col < 14 and 0 <= row < 2:
             return row * 14 + col
+        return None
+
+    def indicator_at(self, x, y):
+        """'fg' or 'bg' for the two swatches in the indicator, else None."""
+        fx, fy = IND_X + 4, IND_Y + 4
+        bx, by = IND_X + 12, IND_Y + 13
+        if fx <= x < fx + 15 and fy <= y < fy + 15:
+            return "fg"
+        if bx <= x < bx + 15 and by <= y < by + 15:
+            return "bg"
         return None
 
     def on_swap(self, x, y):
@@ -98,7 +110,9 @@ class ColorBox(Gtk.DrawingArea):
         return True
 
     def on_motion(self, w, ev):
-        if self.on_fun(ev.x, ev.y):
+        if self.indicator_at(ev.x, ev.y):
+            self.emit("hint", "Double-click to edit the foreground or background color (hex too).")
+        elif self.on_fun(ev.x, ev.y):
             self.emit("hint", self.fun_text())
         elif self.on_swap(ev.x, ev.y):
             self.emit("hint", self.swap_text())
@@ -124,6 +138,10 @@ class ColorBox(Gtk.DrawingArea):
             if ev.type == Gdk.EventType.BUTTON_PRESS:
                 self.fun_down = True
                 self.queue_draw()
+            return True
+        which = self.indicator_at(ev.x, ev.y)
+        if which and ev.button == 1 and ev.type == Gdk.EventType._2BUTTON_PRESS:
+            self.emit("edit-indicator", which)
             return True
         i = self.index_at(ev.x, ev.y)
         if i is None:

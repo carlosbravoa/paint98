@@ -477,11 +477,11 @@ class Canvas(Gtk.DrawingArea):
         ccr.paint()
         self._select_masked(crop, x0, y0)
 
-    def lift_selection(self, erase=True):
+    def lift_selection(self, erase=True, label=None):
         sel = self._selection
         if sel is None or sel.floating:
             return
-        self.doc.push_undo()
+        self.doc.push_undo(label or ("Move Selection" if erase else "Copy Selection"))
         if erase:
             cr = cairo.Context(self.doc.surface)
             imageops.set_rgb(cr, self.state.bg)
@@ -518,7 +518,7 @@ class Canvas(Gtk.DrawingArea):
         self.commit_all()
         if self.state.tool not in ("rect_select", "free_select"):
             self.state.set_tool("rect_select")
-        self.doc.push_undo()
+        self.doc.push_undo("Paste")
         self.selection = Selection(surf, x, y, floating=True)
 
     def visible_origin(self):
