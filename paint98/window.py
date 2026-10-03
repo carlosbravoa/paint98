@@ -17,7 +17,7 @@ from .canvas import Canvas  # noqa: E402
 from .colorbox import ColorBox  # noqa: E402
 from .funpaints import set_paint, solid  # noqa: E402
 from .document import Document, pixbuf_to_surface, surface_to_pixbuf  # noqa: E402
-from .state import DEFAULT_HELP, TOOL_NAMES, PaintState  # noqa: E402
+from .state import DEFAULT_HELP, DEFAULT_PALETTE, TOOL_NAMES, PaintState  # noqa: E402
 from .autosave import AutoSaver  # noqa: E402
 from .history import HistoryWindow  # noqa: E402
 from .settingsbar import SymmetryBar, ToolSettingsPanel  # noqa: E402
@@ -397,7 +397,9 @@ class MainWindow(Win98Window):
                 return None
 
         pal = rgb_list(cfg.get("custom_palette") or [])
-        if pal and len(pal) == 28:
+        # Older versions saved an untouched copy of the original colours as
+        # the custom palette; treat that as "not customised yet" (blank).
+        if pal and len(pal) == 28 and pal != DEFAULT_PALETTE:
             st.custom_palette = pal
         stk = cfg.get("sticker") or {}
         try:
@@ -815,8 +817,10 @@ class MainWindow(Win98Window):
     def on_edit_indicator(self, colorbox, which):
         """Edit the current foreground/background colour directly."""
         current = self.state.fg if which == "fg" else self.state.bg
-        dlg = dialogs.EditColorsDialog(self, solid(current))
+        dlg = self.edit_colors_dialog(solid(current))
         if dlg.run() == dialogs.OK:
+            if dlg.custom_changed:
+                self.state.set_palette(dlg.custom)
             (self.state.set_fg if which == "fg" else self.state.set_bg)(dlg.color)
         dlg.destroy()
 
@@ -1481,13 +1485,22 @@ class MainWindow(Win98Window):
     def on_edit_colors(self, index=None):
         if index is None:
             index = self.palette_index
-        dlg = dialogs.EditColorsDialog(self, solid(self.state.palette[index]))
+        st = self.state
+        start = index if st.palette_mode == "custom" else 0
+        dlg = self.edit_colors_dialog(solid(st.palette[index]), start)
         if dlg.run() == dialogs.OK:
-            # The fun palette is fixed: just paint with the chosen colour.
-            if self.state.palette_mode != "fun":
-                self.state.set_palette_color(index, dlg.color)
-            self.state.set_fg(dlg.color)
+            if dlg.custom_changed:
+                # Colours were added to the custom boxes: show them all.
+                st.set_palette(dlg.custom)
+            elif st.palette_mode != "fun":
+                # The fun palette is fixed: just paint with the chosen colour.
+                st.set_palette_color(index, dlg.color)
+            st.set_fg(dlg.color)
         dlg.destroy()
+
+    def edit_colors_dialog(self, color, start_index=0):
+        return dialogs.EditColorsDialog(self, color, custom=self.state.custom_palette,
+                                        start_index=start_index)
 
     def on_get_colors(self):
         path = self.file_dialog("Get Colors", Gtk.FileChooserAction.OPEN,

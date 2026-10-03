@@ -22,6 +22,10 @@ description: |
    * Set your picture as the GNOME desktop wallpaper (tiled or centred)
 grade: stable
 license: MIT
+website: https://github.com/carlosbravoa/paint98
+source-code: https://github.com/carlosbravoa/paint98
+issues: https://github.com/carlosbravoa/paint98/issues
+contact: https://github.com/carlosbravoa/paint98/issues
 confinement: strict
 icon: snap/gui/paint98.png
 

@@ -68,8 +68,9 @@ Status: `[ ]` to do, `[~]` in progress, `[x]` done, `[-]` won't do.
 ## Follow-ups noticed along the way
 
 17. [ ] Movable symmetry centre (drag the centre point on the canvas).
-18. [ ] Rewrite git history to drop `paint.png` from the first commit before
-    making the repository public.
+18. [-] Rewrite git history to drop `paint.png` from the first commit before
+    making the repository public. *(Not needed: the picture isn't a
+    copyright problem; it's just no longer tracked.)*
 19. [x] **Hex colour input.** Type or paste `#RRGGBB` (or `#RGB`) in Edit
     Colors; double-click the foreground/background swatch to edit that colour
     directly.

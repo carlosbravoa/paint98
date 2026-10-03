@@ -26,6 +26,12 @@ app (`paint98/data/win98.css` plus hand-made pixel art in
 Keyboard shortcuts follow the original, including its quirks: Select All is
 Ctrl+L and Ctrl+A toggles the colour box.
 
+## Install
+
+```sh
+sudo snap install paint98 --beta
+```
+
 ## Running from source
 
 Needs Python 3, PyGObject, pycairo and GTK 3:

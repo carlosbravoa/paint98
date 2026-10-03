@@ -285,9 +285,6 @@ BASIC_COLORS = [
     "400000", "804000", "004000", "004040", "000080", "000040", "400040", "400080",
     "000000", "808000", "808040", "808080", "408080", "C0C0C0", "400040", "FFFFFF",
 ]
-CUSTOM_COLORS = [(255, 255, 255)] * 16
-
-
 def _hex(h):
     return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
 
@@ -359,12 +356,17 @@ class SwatchGrid(Gtk.DrawingArea):
 class EditColorsDialog(Win98Dialog):
     SPEC_W, SPEC_H = 175, 187
 
-    def __init__(self, parent, color):
+    def __init__(self, parent, color, custom=None, start_index=0):
+        """custom: the main window's custom palette (28 colours). Colours
+        added here are kept in self.custom; self.custom_changed tells the
+        caller to apply them."""
         super().__init__(parent, "Edit Colors")
         self.color = tuple(color)
+        self.custom = [tuple(c) for c in (custom or [(255, 255, 255)] * 28)]
+        self.custom_changed = False
         self.h, self.s, self.l = rgb_to_hsl240(self.color)
         self.basic = [_hex(h) for h in BASIC_COLORS]
-        self.custom_index = 0
+        self.custom_index = max(0, min(len(self.custom) - 1, start_index))
         self._spectrum = None
 
         outer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -379,7 +381,9 @@ class EditColorsDialog(Win98Dialog):
         lbl = Gtk.Label.new_with_mnemonic("_Custom colors:")
         lbl.set_xalign(0)
         left.pack_start(lbl, False, False, 6)
-        self.custom_grid = SwatchGrid(CUSTOM_COLORS, 8, self.on_swatch)
+        # Same 14 x 2 layout as the colour box's custom palette.
+        self.custom_grid = SwatchGrid(self.custom, 14, self.on_swatch)
+        self.custom_grid.selected = self.custom_index
         left.pack_start(self.custom_grid, False, False, 0)
         # Hex input: type or paste #RRGGBB (also RGB or #RGB).
         hex_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -527,9 +531,13 @@ class EditColorsDialog(Win98Dialog):
         self.define_btn.set_sensitive(False)
 
     def on_add(self):
-        CUSTOM_COLORS[self.custom_index] = self.color
-        self.custom_grid.colors = CUSTOM_COLORS
-        self.custom_index = (self.custom_index + 1) % 16
+        """Put the colour in the selected custom box and move to the next."""
+        self.custom[self.custom_index] = self.color
+        self.custom_changed = True
+        self.custom_index = (self.custom_index + 1) % len(self.custom)
+        self.custom_grid.selected = self.custom_index
+        self.basic_grid.selected = None
+        self.basic_grid.queue_draw()
         self.custom_grid.queue_draw()
 
     # -- drawing --------------------------------------------------------------

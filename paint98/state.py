@@ -72,6 +72,8 @@ TOOL_HELP = {
     "sticker": "Stamps a sticker. Drag to stamp a trail; pick stickers in the Sticker Book.",
 }
 
+BLANK_PALETTE = [(255, 255, 255)] * 28
+
 DEFAULT_HELP = "For Help, click Help Topics on the Help Menu."
 
 ERASER_SIZES = [4, 6, 8, 10]
@@ -103,7 +105,8 @@ class PaintState(GObject.Object):
         self.fg = (0, 0, 0)
         self.bg = (255, 255, 255)
         self.original_palette = list(DEFAULT_PALETTE)
-        self.custom_palette = list(DEFAULT_PALETTE)
+        # Starts blank (all white) so switching to it is clearly visible.
+        self.custom_palette = list(BLANK_PALETTE)
         self.palette_mode = "original"  # "original", "custom" or "fun"
         self.last_plain = "original"     # where the O/C button returns to
         self.tool = "pencil"
