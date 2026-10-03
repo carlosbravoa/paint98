@@ -21,6 +21,7 @@ description: |
    * Opens and saves PNG, BMP, JPEG and TIFF; copy and paste with other apps
    * Set your picture as the GNOME desktop wallpaper (tiled or centred)
 grade: stable
+license: MIT
 confinement: strict
 icon: snap/gui/paint98.png
 

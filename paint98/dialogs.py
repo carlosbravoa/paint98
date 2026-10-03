@@ -576,7 +576,8 @@ def about(parent, version):
     text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
     for line in ("Paint", "Version %s" % version,
                  "A classic-style paint program for the GNOME desktop.", "",
-                 "Made for people who miss the old days."):
+                 "Made for people who miss the old days.", "",
+                 "Released under the MIT License."):
         text.pack_start(Gtk.Label(label=line, xalign=0), False, False, 0)
     sep = Gtk.Box()
     sep.get_style_context().add_class("win98-separator")

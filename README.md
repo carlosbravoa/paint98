@@ -55,3 +55,7 @@ files are opened through the desktop portal, and the wallpaper is written to
   optionally after running a script that drives the tools.
 * `tools/live_shot.py OUTDIR [menu-index]` (with `GDK_BACKEND=x11`) captures
   the real window and an open menu.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
