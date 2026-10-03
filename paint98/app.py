@@ -36,7 +36,7 @@ class PaintApp(Gtk.Application):
     def __init__(self):
         super().__init__(application_id=APP_ID,
                          flags=Gio.ApplicationFlags.HANDLES_OPEN | Gio.ApplicationFlags.NON_UNIQUE)
-        GLib.set_application_name("Paint")
+        GLib.set_application_name("Paint98")
 
     def do_startup(self):
         Gtk.Application.do_startup(self)

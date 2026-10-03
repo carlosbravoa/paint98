@@ -1,4 +1,4 @@
-# Paint
+# Paint98
 
 A native GNOME paint program that looks and behaves like the classic
 Windows 98 Paint: grey 3D chrome, navy title bar, the 16-tool tool box with

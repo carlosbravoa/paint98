@@ -1,4 +1,4 @@
-"""The main Paint window: menus, tool box, colour box, canvas and status bar."""
+"""The main Paint98 window: menus, tool box, colour box, canvas and status bar."""
 
 import json
 import os
@@ -185,7 +185,7 @@ class BitmapViewer(Gtk.Window):
 
 class MainWindow(Win98Window):
     def __init__(self, app, path=None):
-        super().__init__("untitled - Paint", application=app)
+        super().__init__("untitled - Paint98", application=app)
         self.app = app
         self.state = PaintState()
         self.doc = Document(640, 480)
@@ -384,7 +384,7 @@ class MainWindow(Win98Window):
             ("wall_center", "Set As Wa_llpaper (Centered)", lambda: self.on_wallpaper("centered"), None,
              "Centers this bitmap as the desktop wallpaper."),
             ("recent_sep", None),
-            ("exit", "E_xit", self.close, "<Alt>F4", "Quits Paint."),
+            ("exit", "E_xit", self.close, "<Alt>F4", "Quits Paint98."),
         ])
         self.add_menu(mb, "_Edit", [
             ("undo", "_Undo", self.canvas_undo, "<Control>z", "Undoes the last action."),
@@ -467,7 +467,7 @@ class MainWindow(Win98Window):
             ("help_topics", "_Help Topics", lambda: dialogs.help_topics(self), None,
              "Displays Help for the current task or command."),
             None,
-            ("about", "_About Paint", lambda: dialogs.about(self, __version__), None,
+            ("about", "_About Paint98", lambda: dialogs.about(self, __version__), None,
              "Displays program information, version number, and copyright."),
         ])
         self.items["send"].set_sensitive(False)
@@ -692,7 +692,7 @@ class MainWindow(Win98Window):
         self.size_label.set_text("%dx%d" % (w, h) if valid else "")
 
     def update_title(self):
-        self.set_title("%s - Paint" % self.doc.display_name)
+        self.set_title("%s - Paint98" % self.doc.display_name)
 
     def update_textbar(self):
         show = self.canvas.text_active() and self.settings.get("textbar", True)
@@ -756,7 +756,7 @@ class MainWindow(Win98Window):
         self.canvas.commit_all()
         if not self.doc.modified:
             return True
-        res = message_box(self, "Paint", "Save changes to %s?" % self.doc.display_name,
+        res = message_box(self, "Paint98", "Save changes to %s?" % self.doc.display_name,
                           ("Yes", "No", "Cancel"))
         if res == 0:
             return self.on_save()
@@ -769,7 +769,7 @@ class MainWindow(Win98Window):
         return False
 
     def error(self, text):
-        message_box(self, "Paint", text, ("OK",))
+        message_box(self, "Paint98", text, ("OK",))
 
     # -- file ------------------------------------------------------------------------
     def file_dialog(self, title, action, name=None, filters=IMAGE_FILTERS, all_images=True):
@@ -829,7 +829,7 @@ class MainWindow(Win98Window):
             self.doc.load(path)
             self.add_recent(path)
         except GLib.Error as e:
-            self.error("Paint cannot read this file.\n%s\nThis is not a valid bitmap file, or its "
+            self.error("Paint98 cannot read this file.\n%s\nThis is not a valid bitmap file, or its "
                        "format is not currently supported.\n\n%s" % (path, e.message))
         return False
 
@@ -851,7 +851,7 @@ class MainWindow(Win98Window):
         try:
             self.doc.save(path)
         except GLib.Error as e:
-            self.error("Paint cannot save this file.\n\n%s" % e.message)
+            self.error("Paint98 cannot save this file.\n\n%s" % e.message)
             return False
         self.add_recent(path)
         return True
@@ -902,7 +902,7 @@ class MainWindow(Win98Window):
         source = Gio.SettingsSchemaSource.get_default()
         schema = source.lookup("org.gnome.desktop.background", True) if source else None
         if schema is None:
-            self.error("Paint cannot set the wallpaper on this desktop.")
+            self.error("Paint98 cannot set the wallpaper on this desktop.")
             return
         folder = wallpaper_dir()
         for old in os.listdir(folder):
@@ -915,7 +915,7 @@ class MainWindow(Win98Window):
         try:
             self.doc.save(path, surface=self.doc.surface)
         except GLib.Error as e:
-            self.error("Paint cannot save the wallpaper.\n\n%s" % e.message)
+            self.error("Paint98 cannot save the wallpaper.\n\n%s" % e.message)
             return
         uri = GLib.filename_to_uri(path, None)
         settings = Gio.Settings.new("org.gnome.desktop.background")
@@ -967,7 +967,7 @@ class MainWindow(Win98Window):
         surf = pixbuf_to_surface(pb, self.state.bg)
         w, h = surf.get_width(), surf.get_height()
         if w > self.doc.width or h > self.doc.height:
-            res = message_box(self, "Paint",
+            res = message_box(self, "Paint98",
                               "The image in the clipboard is larger than the bitmap.\n"
                               "Would you like the bitmap enlarged?", ("Yes", "No", "Cancel"))
             if res == 0:
@@ -993,7 +993,7 @@ class MainWindow(Win98Window):
             try:
                 self.doc.save(path, surface=surf)
             except GLib.Error as e:
-                self.error("Paint cannot save this file.\n\n%s" % e.message)
+                self.error("Paint98 cannot save this file.\n\n%s" % e.message)
 
     def on_paste_from(self):
         path = self.file_dialog("Paste From", Gtk.FileChooserAction.OPEN)
@@ -1002,7 +1002,7 @@ class MainWindow(Win98Window):
         try:
             pb = GdkPixbuf.Pixbuf.new_from_file(path)
         except GLib.Error as e:
-            self.error("Paint cannot read this file.\n\n%s" % e.message)
+            self.error("Paint98 cannot read this file.\n\n%s" % e.message)
             return
         self.float_pixbuf(pb)
 
@@ -1043,7 +1043,7 @@ class MainWindow(Win98Window):
 
         def done(error):
             if error is not None:
-                message_box(parent, "Paint", "Paint cannot save the replay.\n\n%s" % error, ("OK",))
+                message_box(parent, "Paint98", "Paint98 cannot save the replay.\n\n%s" % error, ("OK",))
 
         export_gif(parent, frames, path, done)
 
@@ -1156,7 +1156,7 @@ class MainWindow(Win98Window):
             w, h, colors = dlg.result()
             self.doc.resize(w, h, self.state.bg)
             if not colors and not self.settings.get("monochrome", False):
-                res = message_box(self, "Paint", "Converting to black-and-white will lose color "
+                res = message_box(self, "Paint98", "Converting to black-and-white will lose color "
                                   "information. Do you want to continue?", ("Yes", "No"))
                 if res == 0:
                     def fn(s):
@@ -1203,7 +1203,7 @@ class MainWindow(Win98Window):
         try:
             self.state.set_palette(read_pal(path))
         except (OSError, ValueError, struct.error):
-            self.error("Paint cannot read this palette file.")
+            self.error("Paint98 cannot read this palette file.")
 
     def on_save_colors(self):
         path = self.file_dialog("Save Colors", Gtk.FileChooserAction.SAVE, "untitled.pal",
@@ -1213,4 +1213,4 @@ class MainWindow(Win98Window):
         try:
             write_pal(path, [solid(c) for c in self.state.palette])
         except OSError as e:
-            self.error("Paint cannot save this palette file.\n\n%s" % e)
+            self.error("Paint98 cannot save this palette file.\n\n%s" % e)

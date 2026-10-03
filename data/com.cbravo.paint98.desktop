@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=Paint
+Name=Paint98
 GenericName=Image Editor
 Comment=Create and edit drawings, the classic way
 Exec=paint98 %f

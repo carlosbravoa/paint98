@@ -187,7 +187,7 @@ class ReplayWindow(Win98Window):
     SPEEDS = [1, 2, 4, 8]
 
     def __init__(self, parent, frames, save_cb):
-        super().__init__("Replay - Paint", buttons=("close",), icon=True)
+        super().__init__("Replay - Paint98", buttons=("close",), icon=True)
         self.set_transient_for(parent)
         self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
         self.frames = frames

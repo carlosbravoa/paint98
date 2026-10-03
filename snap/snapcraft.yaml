@@ -1,10 +1,10 @@
 name: paint98
 base: core24
 version: '1.0.0'
-title: Paint
+title: Paint98
 summary: The classic paint program, pixel for pixel, on the GNOME desktop
 description: |
-  Paint brings back the look and feel of the classic Windows 98 paint program:
+  Paint98 brings back the look and feel of the classic Windows 98 paint program:
   the 3D grey chrome, the sixteen-tool tool box, the 28-colour palette and the
   same menus and dialogs, built natively with GTK for GNOME.
 

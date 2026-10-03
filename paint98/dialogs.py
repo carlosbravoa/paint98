@@ -558,7 +558,7 @@ class EditColorsDialog(Win98Dialog):
 # ---------------------------------------------------------------------------
 
 def about(parent, version):
-    dlg = Win98Dialog(parent, "About Paint", help_button=False)
+    dlg = Win98Dialog(parent, "About Paint98", help_button=False)
     row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
     icon = Gtk.DrawingArea()
     icon.set_size_request(32, 32)
@@ -574,7 +574,7 @@ def about(parent, version):
     icon.connect("draw", draw_icon)
     row.pack_start(icon, False, False, 0)
     text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-    for line in ("Paint", "Version %s" % version,
+    for line in ("Paint98", "Version %s" % version,
                  "A classic-style paint program for the GNOME desktop.", "",
                  "Made for people who miss the old days.", "",
                  "Released under the MIT License."):
@@ -582,7 +582,7 @@ def about(parent, version):
     sep = Gtk.Box()
     sep.get_style_context().add_class("win98-separator")
     text.pack_start(sep, False, False, 6)
-    mem = Gtk.Label(label="Physical memory available to Paint:   plenty", xalign=0)
+    mem = Gtk.Label(label="Physical memory available to Paint98:   plenty", xalign=0)
     text.pack_start(mem, False, False, 0)
     row.pack_start(text, True, True, 0)
     col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -597,10 +597,10 @@ def about(parent, version):
 
 
 HELP_TOPICS = [
-    ("Paint overview",
-     "Paint is a drawing tool you can use to create simple or elaborate drawings. "
+    ("Paint98 overview",
+     "Paint98 is a drawing tool you can use to create simple or elaborate drawings. "
      "These drawings can be either black-and-white or color, and can be saved as "
-     "bitmap or PNG files.\n\nYou can also use Paint to view and edit pictures, "
+     "bitmap or PNG files.\n\nYou can also use Paint98 to view and edit pictures, "
      "and to make one of your pictures the desktop wallpaper."),
     ("Drawing lines and shapes",
      "Click the Line, Curve, Rectangle, Polygon, Ellipse or Rounded Rectangle tool, "
@@ -636,7 +636,7 @@ HELP_TOPICS = [
 
 
 def help_topics(parent):
-    dlg = Win98Dialog(parent, "Paint Help", help_button=False)
+    dlg = Win98Dialog(parent, "Paint98 Help", help_button=False)
     dlg.set_resizable(True)
     dlg.set_modal(False)
     row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
