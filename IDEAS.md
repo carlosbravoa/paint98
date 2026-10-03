@@ -25,8 +25,12 @@ Status: `[ ]` to do, `[~]` in progress, `[x]` done.
 
 ## For kids
 
-4. [ ] **Stickers (stamp tool).** Pixel-art stamps (stars, animals, sun,
-   house…) placed with a click and sized with the Size slider.
+4. [x] **Stickers (stamp tool).** Pixel-art stamps (stars, animals, sun,
+   house…) placed with a click and sized with the Size slider. *(Done: Sticker
+   tool + Sticker Book (View → Sticker Book…, Ctrl+B) with 24 hand-made pixel
+   stickers, ~300 colour emoji in 7 categories, and My Stickers made with
+   Edit → Save Selection as Sticker; drag to stamp a trail; works with Size,
+   Opacity and Symmetry.)*
 5. [ ] **Coloring book.** File → New from Coloring Page… opens line drawings
    made for the fill tool.
 6. [ ] **Stroke smoothing.** A stabiliser slider that steadies shaky lines.

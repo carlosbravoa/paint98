@@ -20,6 +20,8 @@ from .document import Document, pixbuf_to_surface, surface_to_pixbuf  # noqa: E4
 from .state import DEFAULT_HELP, PaintState  # noqa: E402
 from .settingsbar import SymmetryBar, ToolSettingsPanel  # noqa: E402
 from .replay import Recorder, ReplayWindow, export_gif  # noqa: E402
+from .stickerbook import StickerBook  # noqa: E402
+from . import stickers  # noqa: E402
 from . import symmetry  # noqa: E402
 from .textbar import TextToolbar  # noqa: E402
 from .toolbox import ToolBox  # noqa: E402
@@ -191,6 +193,7 @@ class MainWindow(Win98Window):
         self.restore_tool_settings()
         self.palette_index = 0
         self.thumbnail = None
+        self.sticker_book = None
         self.page_setup = None
         self.print_settings = None
         self.items = {}
@@ -274,6 +277,16 @@ class MainWindow(Win98Window):
         pal = rgb_list(cfg.get("custom_palette") or [])
         if pal and len(pal) == 28:
             st.custom_palette = pal
+        stk = cfg.get("sticker") or {}
+        try:
+            if isinstance(stk.get("current"), str) and stickers.exists(stk["current"]):
+                st.sticker = stk["current"]
+            st.sticker_size = max(8, min(256, int(stk.get("size", st.sticker_size))))
+            recent = [s for s in stk.get("recent", []) if isinstance(s, str) and stickers.exists(s)]
+            if recent:
+                st.sticker_recent = recent[:6]
+        except (TypeError, ValueError):
+            pass
         if cfg.get("symmetry") in [m for m, _, _ in symmetry.MODES]:
             st.symmetry = cfg["symmetry"]
         mode = cfg.get("palette_mode") or ("custom" if cfg.get("use_custom") else "original")
@@ -302,6 +315,8 @@ class MainWindow(Win98Window):
         st = self.state
         self.settings["custom_palette"] = ["%02x%02x%02x" % c for c in st.custom_palette]
         self.settings["symmetry"] = st.symmetry
+        self.settings["sticker"] = {"current": st.sticker, "size": st.sticker_size,
+                                    "recent": st.sticker_recent}
         self.settings["palette_mode"] = st.palette_mode
         self.settings["last_plain"] = st.last_plain
         self.settings.pop("use_custom", None)
@@ -383,6 +398,8 @@ class MainWindow(Win98Window):
             None,
             ("copy_to", "C_opy To...", self.on_copy_to, None, "Copies the selection to a file."),
             ("paste_from", "Paste _From...", self.on_paste_from, None, "Pastes a file into the selection."),
+            ("save_sticker", "Save Selection as _Sticker", self.on_save_sticker, None,
+             "Adds the selection to My Stickers in the Sticker Book."),
         ])
         self.add_menu(mb, "_View", [
             ("v_toolbox", "_Tool Box", self.on_toggle_view, "<Control>t", "Shows or hides the tool box.", "check"),
@@ -408,6 +425,8 @@ class MainWindow(Win98Window):
             ("view_bitmap", "_View Bitmap", self.on_view_bitmap, "<Control>f", "Displays the entire picture."),
             ("replay", "_Replay...", self.on_replay, "<Control><Shift>r",
              "Plays back how the picture was drawn."),
+            ("sticker_book", "Stic_ker Book...", self.show_sticker_book, "<Control>b",
+             "Opens the Sticker Book to pick a sticker."),
         ])
         self.add_menu(mb, "_Image", [
             ("flip", "_Flip/Rotate...", self.on_flip_rotate, "<Control>r",
@@ -522,7 +541,7 @@ class MainWindow(Win98Window):
         # signal, so leave it enabled here and refine it when the menu opens.
         self.items["undo"].set_sensitive(True)
         self.items["redo"].set_sensitive(self.doc.can_redo())
-        for n in ("cut", "copy", "clear_sel", "copy_to", "recolor"):
+        for n in ("cut", "copy", "clear_sel", "copy_to", "recolor", "save_sticker"):
             self.items[n].set_sensitive(sel)
         self.items["paste"].set_sensitive(True)
         self.items["grid"].set_sensitive(self.canvas.zoom >= 4)
@@ -653,6 +672,8 @@ class MainWindow(Win98Window):
         self.state.connect("palette-changed", self.on_palette_changed)
         self.state.connect("options-changed", lambda *a: self.sync_symmetry_checks())
         self.symmetrybar.connect("hint", lambda w, t: self.set_hint(t))
+        self.toolbox.connect("open-sticker-book", lambda *a: self.show_sticker_book())
+        self.canvas.connect("selection-changed", self.on_selection_for_book)
         self.refresh_sensitivity()
 
     def on_colorbox_press(self, w, ev):
@@ -723,6 +744,8 @@ class MainWindow(Win98Window):
             ("ctx_invert", "_Invert Colors", self.on_invert, None, "Inverts the colors of the selection."),
             ("ctx_recolor", "_Recolor Selection", self.on_recolor_selection, None,
              "Paints the selection with the foreground color (Fun Colors too)."),
+            ("ctx_sticker", "Save as _Sticker", self.on_save_sticker, None,
+             "Adds the selection to My Stickers in the Sticker Book."),
         ])
         menu.attach_to_widget(self.canvas, None)
         menu.show_all()
@@ -1072,6 +1095,35 @@ class MainWindow(Win98Window):
             return s
 
         self.apply_transform(fn)
+
+    def selection_sticker_surface(self):
+        sel = self.canvas.selection
+        if sel is None:
+            return None
+        return sel.render(self.state.transparent, self.state.bg)
+
+    def show_sticker_book(self):
+        if self.sticker_book is None:
+            self.sticker_book = StickerBook(self, self.state, self.selection_sticker_surface)
+        self.sticker_book.sync_buttons()
+        self.sticker_book.show_all()
+        self.sticker_book.present()
+
+    def on_selection_for_book(self, *a):
+        if self.sticker_book is not None and self.sticker_book.get_visible():
+            self.sticker_book.sync_buttons()
+
+    def on_save_sticker(self):
+        surf = self.selection_sticker_surface()
+        if surf is None:
+            return
+        sid = stickers.save_user_sticker(surf)
+        if sid is None:
+            return
+        self.state.choose_sticker(sid)
+        if self.sticker_book is not None:
+            self.sticker_book.reload("My Stickers")
+        self.set_hint("Saved to My Stickers. Pick the Sticker tool to stamp it.")
 
     def on_recolor_selection(self):
         sel = self.canvas.selection

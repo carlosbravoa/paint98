@@ -10,7 +10,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("PangoCairo", "1.0")
 from gi.repository import Gdk, GLib, Pango, PangoCairo  # noqa: E402
 
-from . import imageops, symmetry, win98  # noqa: E402
+from . import imageops, stickers, symmetry, win98  # noqa: E402
 from .funpaints import is_fun, set_paint, solid  # noqa: E402
 from .imageops import bresenham, disc_offsets, set_rgb, square_offsets, stamp_path  # noqa: E402
 from .state import AIRBRUSH_SIZES, BRUSH_SHAPES, MAGNIFY_LEVELS  # noqa: E402
@@ -1297,6 +1297,84 @@ class MagicWandTool(SelectTool):
         pass
 
 
+class StickerTool(Tool):
+    """Stamps the current sticker centred on the pointer; dragging stamps a
+    trail. Uses the Size and Opacity sliders and repeats with Symmetry."""
+    name = "sticker"
+    cursor = "none"
+
+    def __init__(self, canvas):
+        super().__init__(canvas)
+        self.pos = None
+        self.layer = None
+
+    def image(self):
+        return stickers.render(self.state.sticker, self.state.sticker_size)
+
+    def press(self, x, y, button, mods):
+        if button != 1:
+            return
+        self.doc.push_undo()
+        self.base = self.doc.undo_stack[-1]
+        self.layer = imageops.new_surface(self.doc.width, self.doc.height)
+        self.last = None
+        self.stamp(x, y)
+
+    def drag(self, x, y, mods):
+        self.pos = (x, y)
+        if self.layer is None:
+            return
+        spacing = max(4, self.state.sticker_size * 0.8)
+        # Fill the path evenly, however fast the pointer moved.
+        while math.dist(self.last, (x, y)) >= spacing:
+            lx, ly = self.last
+            d = math.dist(self.last, (x, y))
+            self.stamp(round(lx + (x - lx) * spacing / d), round(ly + (y - ly) * spacing / d))
+
+    def release(self, x, y, button, mods):
+        self.layer = None
+
+    def cancel(self):
+        self.layer = None
+
+    def stamp(self, x, y):
+        img = self.image()
+        size = img.get_width()
+        lcr = cairo.Context(self.layer)
+        lcr.set_source_surface(img, x - size // 2, y - size // 2)
+        lcr.paint()
+        self.last = (x, y)
+        cr = cairo.Context(self.doc.surface)
+        cr.set_operator(cairo.OPERATOR_SOURCE)
+        cr.set_source_surface(self.base, 0, 0)
+        cr.paint()
+        cr.set_operator(cairo.OPERATOR_OVER)
+        alpha = self.state.tool_opacity("sticker")
+        for m in self.symmetry_transforms():
+            cr.set_matrix(m)
+            cr.set_source_surface(self.layer, 0, 0)
+            cr.get_source().set_filter(cairo.FILTER_NEAREST)
+            cr.paint_with_alpha(alpha)
+        self.doc.changed()
+
+    def hover(self, x, y):
+        self.pos = (x, y)
+        self.c.queue_draw()
+
+    def leave(self):
+        self.pos = None
+        self.c.queue_draw()
+
+    def draw_image_layer(self, cr):
+        if self.pos is None or self.layer is not None:
+            return
+        img = self.image()
+        size = img.get_width()
+        cr.set_source_surface(img, self.pos[0] - size // 2, self.pos[1] - size // 2)
+        cr.get_source().set_filter(cairo.FILTER_NEAREST)
+        cr.paint_with_alpha(0.6)
+
+
 TOOL_CLASSES = {
     "free_select": FreeSelectTool,
     "rect_select": RectSelectTool,
@@ -1315,4 +1393,5 @@ TOOL_CLASSES = {
     "ellipse": EllipseTool,
     "rounded_rect": RoundedRectTool,
     "magic_wand": MagicWandTool,
+    "sticker": StickerTool,
 }

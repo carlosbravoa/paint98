@@ -9,6 +9,7 @@ before the snapshot is taken, so it can drive tools programmatically.
 
 import os
 os.environ.setdefault("XDG_CONFIG_HOME", os.path.join(os.environ.get("TMPDIR", "/tmp"), "paint98-shot-config"))
+os.environ.setdefault("XDG_DATA_HOME", os.path.join(os.environ.get("TMPDIR", "/tmp"), "paint98-shot-data"))
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))

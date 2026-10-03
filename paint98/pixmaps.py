@@ -338,6 +338,24 @@ TOOL_ICONS = {
         "..kk............",
         "................",
     ],
+    "sticker": [
+        "................",
+        ".kkkkkkkkkkk....",
+        ".kwwwwwwwwwwk...",
+        ".kwwwwkwwwwwwk..",
+        ".kwwwkykwwwwwwk.",
+        ".kwkkkyykkkwwwk.",
+        ".kwkyyyyyyykwwk.",
+        ".kwwkyyyyykwwwk.",
+        ".kwwkyykyykwwwk.",
+        ".kwkyk.kykwwwwk.",
+        ".kwkk...kkwwkkk.",
+        ".kwwwwwwwwwksdk.",
+        ".kwwwwwwwwwksk..",
+        ".kwwwwwwwwwkk...",
+        ".kkkkkkkkkkk....",
+        "................",
+    ],
 }
 
 # Window / application icon (palette with a brush).

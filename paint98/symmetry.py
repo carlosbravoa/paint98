@@ -24,7 +24,7 @@ HINTS = {
 
 # Tools whose strokes and shapes are repeated.
 TOOLS = ("pencil", "brush", "airbrush", "eraser", "line", "curve",
-         "rectangle", "polygon", "ellipse", "rounded_rect")
+         "rectangle", "polygon", "ellipse", "rounded_rect", "sticker")
 
 
 def _rotation(cx, cy, degrees):

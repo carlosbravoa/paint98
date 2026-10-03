@@ -27,7 +27,7 @@ TOOLS = [
     "line", "curve",
     "rectangle", "polygon",
     "ellipse", "rounded_rect",
-    "magic_wand",
+    "magic_wand", "sticker",
 ]
 
 TOOL_NAMES = {
@@ -48,6 +48,7 @@ TOOL_NAMES = {
     "ellipse": "Ellipse",
     "rounded_rect": "Rounded Rectangle",
     "magic_wand": "Magic Wand",
+    "sticker": "Sticker",
 }
 
 TOOL_HELP = {
@@ -68,6 +69,7 @@ TOOL_HELP = {
     "ellipse": "Draws an ellipse with the selected fill style.",
     "rounded_rect": "Draws a rounded rectangle with the selected fill style.",
     "magic_wand": "Selects an area of similar color. Shift+click adds more areas to the selection.",
+    "sticker": "Stamps a sticker. Drag to stamp a trail; pick stickers in the Sticker Book.",
 }
 
 DEFAULT_HELP = "For Help, click Help Topics on the Help Menu."
@@ -94,7 +96,7 @@ class PaintState(GObject.Object):
 
     # Tools that put paint on the picture and therefore have an opacity.
     PAINT_TOOLS = ("eraser", "fill", "pencil", "brush", "airbrush", "text", "line",
-                   "curve", "rectangle", "polygon", "ellipse", "rounded_rect")
+                   "curve", "rectangle", "polygon", "ellipse", "rounded_rect", "sticker")
 
     def __init__(self):
         super().__init__()
@@ -114,6 +116,9 @@ class PaintState(GObject.Object):
         self.pencil_size = 1
         self.brush_size = BRUSH_SHAPES[1][1]  # matches the default preset below
         self.eraser_px = ERASER_SIZES[self.eraser_size]
+        self.sticker = "px:Star"
+        self.sticker_size = 48
+        self.sticker_recent = ["px:Star", "px:Heart", "px:Sun", "px:Cat"]
         self.fill_mode = 0  # 0 solid, 1 linear gradient, 2 radial gradient
         self.tolerance = 0  # percent (fill and magic wand)
         self.wand_global = False  # magic wand: all similar colours, not just touching ones
@@ -208,8 +213,17 @@ class PaintState(GObject.Object):
         self.eraser_px = ERASER_SIZES[index]
         self.emit("options-changed")
 
-    SIZE_LIMITS = {"pencil": (1, 50), "brush": (1, 64), "eraser": (2, 64)}
-    SIZE_ATTRS = {"pencil": "pencil_size", "brush": "brush_size", "eraser": "eraser_px"}
+    SIZE_LIMITS = {"pencil": (1, 50), "brush": (1, 64), "eraser": (2, 64), "sticker": (8, 256)}
+    SIZE_ATTRS = {"pencil": "pencil_size", "brush": "brush_size", "eraser": "eraser_px",
+                  "sticker": "sticker_size"}
+
+    def choose_sticker(self, sid):
+        """Make a sticker current and remember it among the recent ones."""
+        self.sticker = sid
+        self.sticker_recent = [sid] + [s for s in self.sticker_recent if s != sid][:5]
+        if self.tool != "sticker":
+            self.set_tool("sticker")
+        self.emit("options-changed")
 
     def tool_size(self, tool=None):
         attr = self.SIZE_ATTRS.get(tool or self.tool)

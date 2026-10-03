@@ -9,7 +9,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gdk, GObject, Gtk, Pango, PangoCairo  # noqa: E402
 
-from . import pixmaps, win98  # noqa: E402
+from . import pixmaps, stickers, win98  # noqa: E402
 from .state import (AIRBRUSH_SIZES, BRUSH_SHAPES, ERASER_SIZES,  # noqa: E402
                     MAGNIFY_LEVELS, TOOL_HELP, TOOL_NAMES, TOOLS)
 from .imageops import disc_offsets, square_offsets  # noqa: E402
@@ -42,6 +42,7 @@ AIR_DOTS = [_airbrush_dots(s, i) for i, s in enumerate(AIRBRUSH_SIZES)]
 class ToolBox(Gtk.DrawingArea):
     __gsignals__ = {
         "hint": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
+        "open-sticker-book": (GObject.SignalFlags.RUN_FIRST, None, ()),
     }
 
     def __init__(self, state):
@@ -85,6 +86,12 @@ class ToolBox(Gtk.DrawingArea):
                 for i in range(4):
                     items.append(((bx + 1 + col * 19, by + 4 + i * 16, 18, 16),
                                   ("eraser_shape", "eraser_size"), (shape, i)))
+        elif t == "sticker":
+            # Recent stickers in a 2x3 grid, then a button for the book.
+            for i, sid in enumerate(self.state.sticker_recent[:6]):
+                r, c = divmod(i, 2)
+                items.append(((bx + 1 + c * 19, by + 2 + r * 19, 18, 18), "sticker", sid))
+            items.append(((bx + 1, by + 62, bw - 2, 30), "sticker_book", True))
         elif t == "magic_wand":
             for i in range(2):
                 items.append(((bx + 2, by + 4 + i * 26, bw - 4, 24), "wand_global", bool(i)))
@@ -118,6 +125,8 @@ class ToolBox(Gtk.DrawingArea):
         return None
 
     def is_selected(self, name, value):
+        if name == "sticker_book":
+            return False
         if isinstance(name, tuple):
             return all(getattr(self.state, n) == v for n, v in zip(name, value))
         return getattr(self.state, name) == value
@@ -135,6 +144,10 @@ class ToolBox(Gtk.DrawingArea):
             name, value = opt
             if name == "brush":
                 self.state.choose_brush_preset(value)
+            elif name == "sticker":
+                self.state.choose_sticker(value)
+            elif name == "sticker_book":
+                self.emit("open-sticker-book")
             elif name == ("eraser_shape", "eraser_size"):
                 self.state.choose_eraser_preset(*value)
             elif isinstance(name, tuple):
@@ -204,6 +217,21 @@ class ToolBox(Gtk.DrawingArea):
                 for ox, oy in offs:
                     cr.rectangle(cx + ox, cy + oy, 1, 1)
                 cr.fill()
+            elif name == "sticker":
+                if stickers.exists(value):
+                    img = stickers.render(value, 16)
+                    cr.set_source_surface(img, x + 1, y + 1)
+                    cr.paint()
+            elif name == "sticker_book":
+                win98.raised(cr, x, y, w, h)
+                pixmaps.paint(cr, "sticker", x + (w - 16) // 2, y + 2)
+                layout = PangoCairo.create_layout(cr)
+                layout.set_font_description(Pango.FontDescription("Sans 6"))
+                layout.set_text("Book", -1)
+                _, lr = layout.get_pixel_extents()
+                cr.set_source_rgb(0, 0, 0)
+                cr.move_to(x + (w - lr.width) // 2, y + 18)
+                PangoCairo.show_layout(cr, layout)
             elif name == "wand_global":
                 self.draw_wand_mode(cr, x + (w - 28) // 2, y + 4, value)
             elif name == "fill_mode":
