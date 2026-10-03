@@ -950,7 +950,7 @@ class SelectTool(Tool):
                 name = {"n": "ns-resize", "s": "ns-resize", "e": "ew-resize", "w": "ew-resize",
                         "ne": "nesw-resize", "sw": "nesw-resize",
                         "nw": "nwse-resize", "se": "nwse-resize"}[h]
-            elif sel.contains(x, y):
+            elif sel.hit(x, y):
                 name = "move"
         self.c.set_cursor_name(name)
 
@@ -964,7 +964,7 @@ class SelectTool(Tool):
                 self.c.lift_selection()
                 self.orig = (sel.x, sel.y, sel.w, sel.h)
                 return
-            if sel.contains(x, y):
+            if sel.hit(x, y):
                 if button == 3:
                     self.c.show_context_menu()
                     return
@@ -1261,6 +1261,42 @@ class TextTool(Tool):
                 cr.fill()
 
 
+class MagicWandTool(SelectTool):
+    """Click to select an area of similar colour (Fill's tolerance).
+    Shift+click adds another area; options choose touching or all."""
+    name = "magic_wand"
+    cursor = "magic_wand"
+
+    def press(self, x, y, button, mods):
+        sel = self.c.selection
+        if button == 1 and mods & SHIFT and sel is not None and not sel.floating:
+            self.mode = None
+            self.select_at(x, y, add=True)
+            return
+        super().press(x, y, button, mods)
+
+    def start_new(self, x, y):
+        self.select_at(x, y)
+
+    def select_at(self, x, y, add=False):
+        st = self.state
+        find = imageops.similar_mask if st.wand_global else imageops.region_mask
+        res = find(self.doc.surface, x, y, st.tolerance)
+        if res is None:
+            return
+        mask, bbox = res
+        self.c.create_mask_selection(mask, bbox, add=add)
+        sel = self.c.selection
+        if sel is not None:
+            self.c.emit_size(sel.w, sel.h)
+
+    def drag_new(self, x, y):
+        pass
+
+    def finish_new(self, x, y):
+        pass
+
+
 TOOL_CLASSES = {
     "free_select": FreeSelectTool,
     "rect_select": RectSelectTool,
@@ -1278,4 +1314,5 @@ TOOL_CLASSES = {
     "polygon": PolygonTool,
     "ellipse": EllipseTool,
     "rounded_rect": RoundedRectTool,
+    "magic_wand": MagicWandTool,
 }

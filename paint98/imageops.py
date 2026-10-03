@@ -356,3 +356,49 @@ def color_mask(surf, rgb):
     key = rgb_to_pixel(rgb)
     data = bytes(255 if v == key else 0 for v in px.tolist())
     return bytes_to_mask(data, w, h)
+
+
+def similar_mask(surf, x, y, tolerance=0):
+    """Every pixel in the picture within tolerance of the colour at (x, y),
+    touching or not. Returns (A8 mask, (x0, y0, x1, y1)) or None."""
+    w, h = surf.get_width(), surf.get_height()
+    if not (0 <= x < w and 0 <= y < h):
+        return None
+    px, sw = _pixels(surf)
+    vals = px.tolist()
+    if sw != w:
+        vals = [v for r in range(h) for v in vals[r * sw:r * sw + w]]
+    m = _matcher(vals[y * w + x], tolerance)(vals)
+    data = bytes(m).replace(b"\x01", b"\xff")
+    rows = [r for r in range(h) if data.find(b"\xff", r * w, (r + 1) * w) != -1]
+    if not rows:
+        return None
+    x0 = min(data.find(b"\xff", r * w, (r + 1) * w) - r * w for r in rows)
+    x1 = max(data.rfind(b"\xff", r * w, (r + 1) * w) - r * w for r in rows)
+    return bytes_to_mask(data, w, h), (x0, rows[0], x1, rows[-1])
+
+
+def alpha_mask(surf):
+    """A8 copy of a surface's alpha channel."""
+    a = new_mask(surf.get_width(), surf.get_height())
+    cr = cairo.Context(a)
+    cr.set_operator(cairo.OPERATOR_SOURCE)
+    cr.set_source_surface(surf, 0, 0)
+    cr.paint()
+    return a
+
+
+def alpha_edges(surf):
+    """A8 mask of the outline pixels of a surface's opaque area."""
+    a = alpha_mask(surf)
+    eroded = alpha_mask(surf)
+    cr = cairo.Context(eroded)
+    cr.set_operator(cairo.OPERATOR_IN)
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        cr.set_source_surface(a, dx, dy)
+        cr.paint()
+    cr = cairo.Context(a)
+    cr.set_operator(cairo.OPERATOR_DEST_OUT)
+    cr.set_source_surface(eroded, 0, 0)
+    cr.paint()
+    return a

@@ -27,6 +27,7 @@ TOOLS = [
     "line", "curve",
     "rectangle", "polygon",
     "ellipse", "rounded_rect",
+    "magic_wand",
 ]
 
 TOOL_NAMES = {
@@ -46,6 +47,7 @@ TOOL_NAMES = {
     "polygon": "Polygon",
     "ellipse": "Ellipse",
     "rounded_rect": "Rounded Rectangle",
+    "magic_wand": "Magic Wand",
 }
 
 TOOL_HELP = {
@@ -65,6 +67,7 @@ TOOL_HELP = {
     "polygon": "Draws a polygon with the selected fill style.",
     "ellipse": "Draws an ellipse with the selected fill style.",
     "rounded_rect": "Draws a rounded rectangle with the selected fill style.",
+    "magic_wand": "Selects an area of similar color. Shift+click adds more areas to the selection.",
 }
 
 DEFAULT_HELP = "For Help, click Help Topics on the Help Menu."
@@ -112,7 +115,8 @@ class PaintState(GObject.Object):
         self.brush_size = BRUSH_SHAPES[1][1]  # matches the default preset below
         self.eraser_px = ERASER_SIZES[self.eraser_size]
         self.fill_mode = 0  # 0 solid, 1 linear gradient, 2 radial gradient
-        self.tolerance = 0  # percent
+        self.tolerance = 0  # percent (fill and magic wand)
+        self.wand_global = False  # magic wand: all similar colours, not just touching ones
         self.opacity = {t: 100 for t in self.PAINT_TOOLS}  # percent, per tool
         self.airbrush_size = 0
         self.magnify = 1  # index into MAGNIFY_LEVELS

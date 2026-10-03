@@ -226,7 +226,7 @@ class ToolSettingsPanel(Gtk.Box):
         if size is not None:
             self.size.set_range(*st.SIZE_LIMITS[tool])
             self.size.set_value(size)
-        self._show(self.tolerance, tool == "fill")
+        self._show(self.tolerance, tool in ("fill", "magic_wand"))
         self.tolerance.set_value(st.tolerance)
 
 

@@ -18,6 +18,27 @@ WORKSPACE = (0x80 / 255,) * 3
 HANDLE_COLOR = (0, 0, 0x80 / 255)
 
 
+_ants = None
+
+
+def ants_pattern():
+    """Alternating black/white pixels for selection outlines."""
+    global _ants
+    if _ants is None:
+        s = cairo.ImageSurface(cairo.FORMAT_RGB24, 2, 2)
+        c = cairo.Context(s)
+        c.set_source_rgb(1, 1, 1)
+        c.paint()
+        c.set_source_rgb(0, 0, 0)
+        c.rectangle(0, 0, 1, 1)
+        c.rectangle(1, 1, 1, 1)
+        c.fill()
+        _ants = cairo.SurfacePattern(s)
+        _ants.set_extend(cairo.EXTEND_REPEAT)
+        _ants.set_filter(cairo.FILTER_NEAREST)
+    return _ants
+
+
 class Canvas(Gtk.DrawingArea):
     __gsignals__ = {
         "pointer-info": (GObject.SignalFlags.RUN_FIRST, None, (int, int, bool)),
@@ -375,12 +396,39 @@ class Canvas(Gtk.DrawingArea):
         mcr.fill_preserve()
         mcr.set_line_width(1)
         mcr.stroke()
+        self._select_masked(mask, x0, y0)
+
+    def _select_masked(self, mask, x0, y0):
+        """Select the pixels under an A8 mask placed at (x0, y0)."""
+        w, h = mask.get_width(), mask.get_height()
         region = imageops.copy_surface(self.doc.surface, x0, y0, w, h)
         content = imageops.new_surface(w, h)
         cr = cairo.Context(content)
         cr.set_source_surface(region, 0, 0)
         cr.mask_surface(mask, 0, 0)
         self.selection = Selection(content, x0, y0, mask=mask)
+
+    def create_mask_selection(self, full_mask, bbox, add=False):
+        """Select from a picture-sized A8 mask. With add=True the current
+        (not yet moved) selection is merged in."""
+        x0, y0, x1, y1 = bbox
+        sel = self._selection
+        if add and sel is not None and not sel.floating:
+            union = imageops.new_mask(self.doc.width, self.doc.height)
+            ucr = cairo.Context(union)
+            ucr.set_source_rgb(0, 0, 0)
+            ucr.mask_surface(imageops.alpha_mask(sel.content), sel.x, sel.y)
+            ucr.mask_surface(full_mask, 0, 0)
+            full_mask = union
+            x0, y0 = min(x0, sel.x), min(y0, sel.y)
+            x1, y1 = max(x1, sel.x + sel.w - 1), max(y1, sel.y + sel.h - 1)
+        w, h = x1 - x0 + 1, y1 - y0 + 1
+        crop = imageops.new_mask(w, h)
+        ccr = cairo.Context(crop)
+        ccr.set_operator(cairo.OPERATOR_SOURCE)
+        ccr.set_source_surface(full_mask, -x0, -y0)
+        ccr.paint()
+        self._select_masked(crop, x0, y0)
 
     def lift_selection(self, erase=True):
         sel = self._selection
@@ -488,6 +536,15 @@ class Canvas(Gtk.DrawingArea):
                 cr.fill()
 
         if sel is not None:
+            edges = sel.outline()
+            if edges is not None:
+                # Marching-ants style outline of the real shape.
+                cr.save()
+                cr.translate(ORIGIN, ORIGIN)
+                cr.scale(z, z)
+                cr.set_source(ants_pattern())
+                cr.mask_surface(edges, sel.x, sel.y)
+                cr.restore()
             sx, sy = self.to_widget(sel.x, sel.y)
             win98.dotted_rect(cr, int(sx) - 1, int(sy) - 1, sel.w * z + 2, sel.h * z + 2, HANDLE_COLOR)
             cr.set_source_rgb(*HANDLE_COLOR)

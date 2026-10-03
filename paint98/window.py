@@ -15,7 +15,7 @@ from gi.repository import Gdk, GdkPixbuf, Gio, GLib, GObject, Gtk, Pango  # noqa
 from . import __version__, dialogs, imageops, pixmaps, win98  # noqa: E402
 from .canvas import Canvas  # noqa: E402
 from .colorbox import ColorBox  # noqa: E402
-from .funpaints import solid  # noqa: E402
+from .funpaints import set_paint, solid  # noqa: E402
 from .document import Document, pixbuf_to_surface, surface_to_pixbuf  # noqa: E402
 from .state import DEFAULT_HELP, PaintState  # noqa: E402
 from .settingsbar import SymmetryBar, ToolSettingsPanel  # noqa: E402
@@ -414,6 +414,8 @@ class MainWindow(Win98Window):
              "Flips or rotates the picture or a selection."),
             ("stretch", "_Stretch/Skew...", self.on_stretch_skew, "<Control>w",
              "Stretches or skews the picture or a selection."),
+            ("recolor", "_Recolor Selection", self.on_recolor_selection, "<Control><Shift>f",
+             "Paints the selection with the foreground color (Fun Colors too)."),
             ("invert", "_Invert Colors", self.on_invert, "<Control>i",
              "Inverts the colors of the picture or a selection."),
             ("attributes", "_Attributes...", self.on_attributes, "<Control>e",
@@ -520,7 +522,7 @@ class MainWindow(Win98Window):
         # signal, so leave it enabled here and refine it when the menu opens.
         self.items["undo"].set_sensitive(True)
         self.items["redo"].set_sensitive(self.doc.can_redo())
-        for n in ("cut", "copy", "clear_sel", "copy_to"):
+        for n in ("cut", "copy", "clear_sel", "copy_to", "recolor"):
             self.items[n].set_sensitive(sel)
         self.items["paste"].set_sensitive(True)
         self.items["grid"].set_sensitive(self.canvas.zoom >= 4)
@@ -719,6 +721,8 @@ class MainWindow(Win98Window):
             ("ctx_flip", "_Flip/Rotate...", self.on_flip_rotate, None, "Flips or rotates the selection."),
             ("ctx_stretch", "_Stretch/Skew...", self.on_stretch_skew, None, "Stretches or skews the selection."),
             ("ctx_invert", "_Invert Colors", self.on_invert, None, "Inverts the colors of the selection."),
+            ("ctx_recolor", "_Recolor Selection", self.on_recolor_selection, None,
+             "Paints the selection with the foreground color (Fun Colors too)."),
         ])
         menu.attach_to_widget(self.canvas, None)
         menu.show_all()
@@ -1068,6 +1072,24 @@ class MainWindow(Win98Window):
             return s
 
         self.apply_transform(fn)
+
+    def on_recolor_selection(self):
+        sel = self.canvas.selection
+        if sel is None:
+            return
+        self.canvas.lift_selection()
+        sel.bake()
+        src = sel.content
+        w, h = src.get_width(), src.get_height()
+        out = imageops.copy_surface(src)
+        cr = cairo.Context(out)
+        cr.push_group()
+        set_paint(cr, self.state.fg, (0, 0, w - 1, h - 1))
+        cr.mask_surface(src, 0, 0)  # only where something is selected
+        cr.pop_group_to_source()
+        cr.paint_with_alpha(self.state.tool_opacity("fill"))
+        sel.set_content(out)
+        self.canvas.picture_changed()
 
     def on_attributes(self):
         self.canvas.commit_all()

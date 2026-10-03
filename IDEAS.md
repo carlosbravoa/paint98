@@ -16,9 +16,12 @@ Status: `[ ]` to do, `[~]` in progress, `[x]` done.
    radial, kaleidoscope) copy every stroke around the centre of the picture.
    *(Done: Symmetry strip next to the colour box and Options → Symmetry;
    works with pencil, brush, airbrush, eraser, lines, curves and shapes.)*
-3. [ ] **Magic Wand selection.** Click to select every connected pixel of a
+3. [x] **Magic Wand selection.** Click to select every connected pixel of a
    similar colour (same tolerance slider as Fill), then move, recolour or
-   delete it.
+   delete it. *(Done: new tool in the tool box; Shift+click adds areas; options
+   for touching-only or all similar colours; shaped selections show their real
+   outline; Image → Recolor Selection (Ctrl+Shift+F) paints a selection with
+   the foreground colour or a Fun Color.)*
 
 ## For kids
 

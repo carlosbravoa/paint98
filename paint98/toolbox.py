@@ -19,7 +19,8 @@ BTN = 25
 X0, Y0 = 3, 2
 WIDTH = 56
 OPT_X = 6
-OPT_Y = Y0 + 8 * BTN + 4
+ROWS = (len(TOOLS) + 1) // 2
+OPT_Y = Y0 + ROWS * BTN + 4
 OPT_W, OPT_H = 44, 100
 NAVY = (0, 0, 0x80 / 255)
 
@@ -65,7 +66,7 @@ class ToolBox(Gtk.DrawingArea):
     def tool_at(self, x, y):
         col = int((x - X0) // BTN)
         row = int((y - Y0) // BTN)
-        if 0 <= col < 2 and 0 <= row < 8 and x >= X0 and y >= Y0:
+        if 0 <= col < 2 and 0 <= row < ROWS and x >= X0 and y >= Y0 and row * 2 + col < len(TOOLS):
             return TOOLS[row * 2 + col]
         return None
 
@@ -84,6 +85,9 @@ class ToolBox(Gtk.DrawingArea):
                 for i in range(4):
                     items.append(((bx + 1 + col * 19, by + 4 + i * 16, 18, 16),
                                   ("eraser_shape", "eraser_size"), (shape, i)))
+        elif t == "magic_wand":
+            for i in range(2):
+                items.append(((bx + 2, by + 4 + i * 26, bw - 4, 24), "wand_global", bool(i)))
         elif t == "fill":
             for i in range(3):
                 items.append(((bx + 2, by + 4 + i * 20, bw - 4, 18), "fill_mode", i))
@@ -200,6 +204,8 @@ class ToolBox(Gtk.DrawingArea):
                 for ox, oy in offs:
                     cr.rectangle(cx + ox, cy + oy, 1, 1)
                 cr.fill()
+            elif name == "wand_global":
+                self.draw_wand_mode(cr, x + (w - 28) // 2, y + 4, value)
             elif name == "fill_mode":
                 self.draw_fill_mode(cr, x + 4, y + 3, w - 8, h - 6, value)
             elif name == "magnify":
@@ -294,4 +300,29 @@ class ToolBox(Gtk.DrawingArea):
             cr.set_source(pat)
         cr.rectangle(x + 1, y + 1, w - 2, h - 2)
         cr.fill()
+        cr.restore()
+
+    @staticmethod
+    def draw_wand_mode(cr, x, y, everywhere):
+        """Touching area only (one blob) or all similar colours (scattered)."""
+        cr.save()
+        cr.set_antialias(cairo.ANTIALIAS_NONE)
+        cr.set_source_rgb(1, 1, 1)
+        cr.rectangle(x, y, 28, 16)
+        cr.fill()
+        cr.set_source_rgb(0, 0, 0)
+        cr.rectangle(x + 0.5, y + 0.5, 27, 15)
+        cr.set_line_width(1)
+        cr.stroke()
+        cr.set_source_rgb(0.85, 0, 0)
+        spots = ([(3, 3, 9, 7)] if not everywhere else
+                 [(3, 3, 6, 5), (16, 2, 7, 5), (8, 10, 6, 4), (20, 9, 5, 5)])
+        for sx, sy, sw, sh in spots:
+            cr.rectangle(x + sx, y + sy, sw, sh)
+        cr.fill()
+        if not everywhere:
+            # A second red area that is not touching stays unselected (outlined).
+            cr.set_source_rgb(0.85, 0.6, 0.6)
+            cr.rectangle(x + 17, y + 8, 7, 5)
+            cr.fill()
         cr.restore()

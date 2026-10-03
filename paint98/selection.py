@@ -8,6 +8,9 @@ from . import imageops
 class Selection:
     def __init__(self, content, x, y, mask=None, floating=False):
         self.content = content
+        # Free-form and magic wand selections have a shape, not just a box.
+        self.shaped = mask is not None
+        self._outline = None
         self.mask = mask  # A8 surface in content coordinates (free-form only)
         self.x, self.y = x, y
         self.w, self.h = content.get_width(), content.get_height()
@@ -19,12 +22,34 @@ class Selection:
     def contains(self, x, y):
         return self.x <= x < self.x + self.w and self.y <= y < self.y + self.h
 
+    def hit(self, x, y):
+        """True when (x, y) is on the selected pixels (not just in the box)."""
+        if not self.contains(x, y):
+            return False
+        if not self.shaped:
+            return True
+        surf = self.baked()
+        surf.flush()
+        px = surf.get_data().cast("I")
+        return (px[(y - self.y) * (surf.get_stride() // 4) + (x - self.x)] >> 24) > 0
+
+    def outline(self):
+        """A8 mask of the shape's edge pixels (None for plain boxes)."""
+        if not self.shaped:
+            return None
+        surf = self.baked()
+        key = (id(surf), self.w, self.h)
+        if self._outline is None or self._outline[0] != key:
+            self._outline = (key, imageops.alpha_edges(surf))
+        return self._outline[1]
+
     def set_content(self, surf):
         self.content = surf
         self.w, self.h = surf.get_width(), surf.get_height()
         self.mask = None
         self._baked = None
         self._keyed = None
+        self._outline = None
 
     def baked(self):
         """Content scaled to the current on-canvas size."""
