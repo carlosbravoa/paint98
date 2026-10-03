@@ -56,7 +56,62 @@ def paint_dabs(cr, pts, kind, size):
             cr.rectangle(x - h, y - h, size, size)
         cr.fill()
     else:
-        stamp_path(cr, pts, brush_offsets(kind, size))
+        offs = brush_offsets(kind, size)
+        stamp_path(cr, pts, offs)
+        if size > 1 and len(pts) > 1:
+            # A slanted tip leaves holes when it moves across its own
+            # direction; fill the band it sweeps between each pair of points.
+            (ax, ay), (bx, by) = offs[0], offs[-1]
+            for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+                if (x0, y0) == (x1, y1):
+                    continue
+                cr.move_to(x0 + ax + 0.5, y0 + ay + 0.5)
+                cr.line_to(x0 + bx + 0.5, y0 + by + 0.5)
+                cr.line_to(x1 + bx + 0.5, y1 + by + 0.5)
+                cr.line_to(x1 + ax + 0.5, y1 + ay + 0.5)
+                cr.close_path()
+            cr.fill()
+
+
+def draw_footprint(cr, canvas, pos, kind, size, fill=None):
+    """Show a tip's exact pixel footprint at the pointer: optionally filled,
+    always traced in black so it is visible over any colour."""
+    z = canvas.zoom
+    r = size // 2 + 1
+    fp = imageops.new_mask(2 * r + 1, 2 * r + 1)
+    fcr = cairo.Context(fp)
+    fcr.set_antialias(cairo.ANTIALIAS_NONE)
+    paint_dabs(fcr, [(r, r)], kind, size)
+    fp.flush()
+    data, stride = fp.get_data(), fp.get_stride()
+    n = 2 * r + 1
+
+    def on(x, y):
+        return 0 <= x < n and 0 <= y < n and data[y * stride + x] > 127
+
+    wx, wy = canvas.to_widget(pos[0] - r, pos[1] - r)
+    if fill is not None:
+        set_rgb(cr, fill)
+        cr.save()
+        cr.translate(wx, wy)
+        cr.scale(z, z)
+        cr.mask_surface(fp, 0, 0)
+        cr.restore()
+    cr.set_source_rgb(0, 0, 0)
+    for y in range(n):
+        for x in range(n):
+            if not on(x, y):
+                continue
+            px, py = wx + x * z, wy + y * z
+            if not on(x, y - 1):
+                cr.rectangle(px, py, z, 1)
+            if not on(x, y + 1):
+                cr.rectangle(px, py + z - 1, z, 1)
+            if not on(x - 1, y):
+                cr.rectangle(px, py, 1, z)
+            if not on(x + 1, y):
+                cr.rectangle(px + z - 1, py, 1, z)
+    cr.fill()
 
 
 def constrain_45(x0, y0, x1, y1):
@@ -231,8 +286,30 @@ class PencilTool(FreehandTool):
     name = "pencil"
     cursor = "pencil"
 
+    def __init__(self, canvas):
+        super().__init__(canvas)
+        self.pos = None
+
     def tip(self):
         return ("circle", self.state.pencil_size)
+
+    def hover(self, x, y):
+        self.pos = (x, y)
+        if self.state.pencil_size > 1:
+            self.c.queue_draw()
+
+    def drag(self, x, y, mods):
+        super().drag(x, y, mods)
+        self.pos = (x, y)
+
+    def leave(self):
+        self.pos = None
+        self.c.queue_draw()
+
+    def draw_overlay(self, cr):
+        # A thick pencil shows the outline of its tip under the pointer.
+        if self.pos is not None and self.state.pencil_size > 1:
+            draw_footprint(cr, self.c, self.pos, *self.tip())
 
 
 class BrushTool(FreehandTool):
@@ -302,43 +379,8 @@ class EraserTool(StrokeTool):
         self.c.queue_draw()
 
     def draw_overlay(self, cr):
-        if self.pos is None:
-            return
-        kind, size = self.tip()
-        z = self.c.zoom
-        r = size // 2 + 1
-        # Rasterise the footprint, then fill it with the background colour
-        # and trace its pixel edges in black so it shows over any colour.
-        fp = imageops.new_mask(2 * r + 1, 2 * r + 1)
-        fcr = cairo.Context(fp)
-        fcr.set_antialias(cairo.ANTIALIAS_NONE)
-        paint_dabs(fcr, [(r, r)], kind, size)
-        fp.flush()
-        data, stride = fp.get_data(), fp.get_stride()
-        n = 2 * r + 1
-        on = lambda x, y: 0 <= x < n and 0 <= y < n and data[y * stride + x] > 127  # noqa: E731
-        wx, wy = self.c.to_widget(self.pos[0] - r, self.pos[1] - r)
-        set_rgb(cr, self.state.bg)
-        cr.save()
-        cr.translate(wx, wy)
-        cr.scale(z, z)
-        cr.mask_surface(fp, 0, 0)
-        cr.restore()
-        cr.set_source_rgb(0, 0, 0)
-        for y in range(n):
-            for x in range(n):
-                if not on(x, y):
-                    continue
-                px, py = wx + x * z, wy + y * z
-                if not on(x, y - 1):
-                    cr.rectangle(px, py, z, 1)
-                if not on(x, y + 1):
-                    cr.rectangle(px, py + z - 1, z, 1)
-                if not on(x - 1, y):
-                    cr.rectangle(px, py, 1, z)
-                if not on(x + 1, y):
-                    cr.rectangle(px + z - 1, py, 1, z)
-        cr.fill()
+        if self.pos is not None:
+            draw_footprint(cr, self.c, self.pos, *self.tip(), fill=self.state.bg)
 
 
 class AirbrushTool(StrokeTool):
