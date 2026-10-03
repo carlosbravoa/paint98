@@ -1,25 +1,32 @@
 name: paint98
 base: core24
-version: '1.0.0'
+version: '1.0.1'
 title: Paint98
 summary: The classic paint program, pixel for pixel, on the GNOME desktop
 description: |
-  Paint98 brings back the look and feel of the classic Windows 98 paint program:
-  the 3D grey chrome, the sixteen-tool tool box, the 28-colour palette and the
-  same menus and dialogs, built natively with GTK for GNOME.
+  Paint98 brings back the look and feel of the classic Windows 98 paint program on the GNOME desktop: the grey 3D chrome, the sixteen-tool tool box, the 28-colour palette, the same menus, shortcuts and dialogs. It is drawn pixel for pixel, so it looks the same whatever theme you use.
 
-  Features:
-   * Free-form and rectangular selections with move, copy (Ctrl+drag),
-     smear (Shift+drag), stretch handles and transparent mode
-   * Eraser / colour eraser, flood fill, colour picker and magnifier
-   * Pencil, brush (12 shapes), airbrush and text with a fonts toolbar
-   * Line, curve, rectangle, polygon, ellipse and rounded rectangle with
-     outline / fill styles
-   * Flip/rotate, stretch/skew, invert colours, attributes, zoom with grid
-     and thumbnail, view bitmap
-   * Edit colours, load and save .pal palettes
-   * Opens and saves PNG, BMP, JPEG and TIFF; copy and paste with other apps
-   * Set your picture as the GNOME desktop wallpaper (tiled or centred)
+  Under the classic surface there are modern extras that kids and grown-ups will love:
+
+  * Fun Colors: rainbow, fire, ocean, neon and sunset paints that change colour as you draw, plus candy stripes, polka dots, stars, hearts, confetti and gold glitter patterns
+  * Stickers: a Sticker Book with classic pixel-art stickers, hundreds of colour emoji, and your own stickers cut out of your pictures
+  * Symmetry: mirror, four-way, radial and kaleidoscope drawing
+  * Replay: watch how your picture was drawn and share it as an animated GIF
+  * Magic Wand selection, recolouring and transparent cut-outs
+  * Opacity for every tool, adjustable brush, pencil and eraser sizes, fill tolerance and gradient fills
+  * History window to jump back to any step, and autosave with crash recovery
+
+  And everything you remember from the original:
+
+  * Free-form and rectangular selections: move, copy, smear, stretch, transparent mode
+  * Pencil, brush, airbrush, eraser and colour eraser, fill, pick colour, magnifier and text
+  * Line, curve, rectangle, polygon, ellipse and rounded rectangle with outline and fill styles
+  * Flip/rotate, stretch/skew, invert colours, attributes, zoom with grid and thumbnail, view bitmap
+  * Edit colours (with hex input), custom palettes, load and save .pal files
+  * Opens and saves PNG, BMP, JPEG and TIFF; copy and paste with other apps; print and print preview
+  * Set your picture as the desktop wallpaper, tiled or centred
+
+  Paint98 is free software under the MIT license. It is not affiliated with Microsoft.
 grade: stable
 license: MIT
 website: https://github.com/carlosbravoa/paint98

@@ -9,6 +9,15 @@ It is written in Python with GTK 3 and cairo. All the chrome is drawn by the
 app (`paint98/data/win98.css` plus hand-made pixel art in
 `paint98/pixmaps.py`), so it looks the same whatever GTK theme you use.
 
+![Paint98](docs/screenshots/banner.png)
+
+![A landscape painted with Fun Colors and stickers](docs/screenshots/01-landscape.png)
+
+| | |
+| --- | --- |
+| ![Sticker Book](docs/screenshots/02-sticker-book.png) | ![Kaleidoscope drawing](docs/screenshots/03-kaleidoscope.png) |
+| ![Classic menus and Edit Colors](docs/screenshots/04-classic.png) | ![Replay](docs/screenshots/05-replay.png) |
+
 ## Features
 
 | Area | What works |
@@ -61,6 +70,8 @@ files are opened through the desktop portal, and the wallpaper is written to
   optionally after running a script that drives the tools.
 * `tools/live_shot.py OUTDIR [menu-index]` (with `GDK_BACKEND=x11`) captures
   the real window and an open menu.
+* `tools/store_shots.py OUTDIR` (with `GDK_BACKEND=x11`) paints and captures
+  the store screenshots; `tools/banner.py OUT.png` draws the store banner.
 
 ## Ideas
 
