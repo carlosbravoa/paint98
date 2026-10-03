@@ -1,7 +1,7 @@
 """Pixel level operations on cairo ARGB32 image surfaces."""
 
 import math
-from array import array
+import sys
 
 import cairo
 
@@ -16,6 +16,7 @@ def pixel_to_rgb(p):
 
 
 def new_surface(w, h, fill=None):
+    check_size(w, h)
     s = cairo.ImageSurface(cairo.FORMAT_ARGB32, max(1, w), max(1, h))
     if fill is not None:
         cr = cairo.Context(s)
@@ -41,6 +42,46 @@ def set_rgb(cr, rgb):
     cr.set_source_rgb(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255)
 
 
+# Byte offsets of B, G, R, A inside a native-endian ARGB32 pixel.
+_B, _G, _R, _A = (0, 1, 2, 3) if sys.byteorder == "little" else (3, 2, 1, 0)
+_ONE_TO_FF = bytes([0, 255] + [255] * 254)
+
+# Largest picture Paint98 will create (cairo's hard limit is 32767 a side).
+MAX_SIDE = 16000
+MAX_PIXELS = 80_000_000
+
+
+class TooBig(ValueError):
+    pass
+
+
+def check_size(w, h):
+    if w > MAX_SIDE or h > MAX_SIDE or w * h > MAX_PIXELS:
+        raise TooBig("The picture would be %d x %d pixels, which is too big "
+                     "(the limit is %d pixels on a side)." % (w, h, MAX_SIDE))
+
+
+def _plane_bytes(surf):
+    """Pixel bytes without row padding (4 * width * height)."""
+    surf.flush()
+    w, h, stride = surf.get_width(), surf.get_height(), surf.get_stride()
+    raw = bytes(surf.get_data())
+    if stride == 4 * w:
+        return raw
+    return b"".join(raw[y * stride:y * stride + 4 * w] for y in range(h))
+
+
+def _write_plane_bytes(surf, data):
+    w, h, stride = surf.get_width(), surf.get_height(), surf.get_stride()
+    buf = surf.get_data()
+    if stride == 4 * w:
+        buf[:len(data)] = data
+    else:
+        for y in range(h):
+            buf[y * stride:y * stride + 4 * w] = data[y * 4 * w:(y + 1) * 4 * w]
+    surf.mark_dirty()
+
+
 def _pixels(surf):
     surf.flush()
     return surf.get_data().cast("I"), surf.get_stride() // 4
@@ -53,70 +94,13 @@ def get_pixel(surf, x, y):
     return pixel_to_rgb(px[y * sw + x])
 
 
-def flood_fill(surf, x, y, rgb):
-    w, h = surf.get_width(), surf.get_height()
-    if not (0 <= x < w and 0 <= y < h):
-        return False
-    px, sw = _pixels(surf)
-    target = px[y * sw + x]
-    new = rgb_to_pixel(rgb)
-    if target == new:
-        return False
-    stack = [(x, y)]
-    while stack:
-        x, y = stack.pop()
-        row = y * sw
-        if px[row + x] != target:
-            continue
-        lx = x
-        while lx > 0 and px[row + lx - 1] == target:
-            lx -= 1
-        rx = x
-        while rx < w - 1 and px[row + rx + 1] == target:
-            rx += 1
-        px[row + lx:row + rx + 1] = array("I", [new]) * (rx - lx + 1)
-        for ny in (y - 1, y + 1):
-            if 0 <= ny < h:
-                nrow = ny * sw
-                inside = False
-                for i in range(lx, rx + 1):
-                    if px[nrow + i] == target:
-                        if not inside:
-                            stack.append((i, ny))
-                            inside = True
-                    else:
-                        inside = False
-    surf.mark_dirty()
-    return True
-
-
-def replace_color(surf, x0, y0, x1, y1, src_rgb, dst_rgb):
-    """Replace src colour by dst colour inside the given (inclusive) box."""
-    w, h = surf.get_width(), surf.get_height()
-    x0, y0 = max(0, x0), max(0, y0)
-    x1, y1 = min(w - 1, x1), min(h - 1, y1)
-    if x0 > x1 or y0 > y1:
-        return
-    px, sw = _pixels(surf)
-    src = rgb_to_pixel(src_rgb)
-    dst = rgb_to_pixel(dst_rgb)
-    for y in range(y0, y1 + 1):
-        row = y * sw
-        seg = px[row + x0:row + x1 + 1].tolist()
-        if src in seg:
-            px[row + x0:row + x1 + 1] = array("I", [dst if v == src else v for v in seg])
-    surf.mark_dirty()
-
-
 def key_out(surf, rgb):
     """Return a copy of surf where pixels of colour rgb are transparent."""
     out = copy_surface(surf)
-    px, sw = _pixels(out)
-    key = rgb_to_pixel(rgb)
-    vals = px.tolist()
-    if key in vals:
-        px[:] = array("I", [0 if v == key else v for v in vals])
-        out.mark_dirty()
+    cr = cairo.Context(out)
+    cr.set_operator(cairo.OPERATOR_DEST_OUT)
+    cr.set_source_rgba(0, 0, 0, 1)
+    cr.mask_surface(color_mask(surf, rgb), 0, 0)
     return out
 
 
@@ -158,6 +142,7 @@ def rotate(surf, degrees):
 
 def scale(surf, nw, nh):
     nw, nh = max(1, int(nw)), max(1, int(nh))
+    check_size(nw, nh)
     w, h = surf.get_width(), surf.get_height()
     out = cairo.ImageSurface(cairo.FORMAT_ARGB32, nw, nh)
     cr = cairo.Context(out)
@@ -172,22 +157,27 @@ def scale(surf, nw, nh):
 
 
 def skew(surf, deg_h, deg_v, bg=None):
-    """Skew by the given angles (degrees). bg=None leaves new area transparent."""
+    """Skew horizontally, then vertically (like the original program).
+
+    Doing the two shears one after the other keeps the transform invertible
+    for every angle pair. bg=None leaves the new corners transparent."""
     w, h = surf.get_width(), surf.get_height()
     th = math.tan(math.radians(deg_h))
     tv = math.tan(math.radians(deg_v))
-    # Map corners to find the bounding box.
+    m = cairo.Matrix(1, tv, th, 1 + tv * th, 0, 0)
     xs, ys = [], []
     for (x, y) in ((0, 0), (w, 0), (0, h), (w, h)):
-        xs.append(x + th * y)
-        ys.append(y + tv * x)
+        X, Y = m.transform_point(x, y)
+        xs.append(X)
+        ys.append(Y)
     minx, miny = min(xs), min(ys)
     nw = int(math.ceil(max(xs) - minx))
     nh = int(math.ceil(max(ys) - miny))
+    check_size(nw, nh)
     out = new_surface(nw, nh, bg)
     cr = cairo.Context(out)
     cr.set_antialias(cairo.ANTIALIAS_NONE)
-    cr.set_matrix(cairo.Matrix(1, tv, th, 1, -minx, -miny))
+    cr.set_matrix(cairo.Matrix(1, tv, th, 1 + tv * th, -minx, -miny))
     cr.set_source_surface(surf, 0, 0)
     cr.get_source().set_filter(cairo.FILTER_NEAREST)
     cr.rectangle(0, 0, w, h)
@@ -196,25 +186,50 @@ def skew(surf, deg_h, deg_v, bg=None):
 
 
 def invert(surf):
-    """Invert colours in place (keeps alpha)."""
-    px, sw = _pixels(surf)
-    vals = px.tolist()
-    px[:] = array("I", [(v ^ 0x00FFFFFF) if (v >> 24) == 0xFF else (0 if v == 0 else v) for v in vals])
-    surf.mark_dirty()
+    """Invert colours in place, keeping alpha.
+
+    With premultiplied alpha the inverse of a channel c is (alpha - c); doing
+    that subtraction on whole channel planes as big integers never borrows
+    (c <= alpha), so it runs at C speed even on huge pictures."""
+    data = bytearray(_plane_bytes(surf))
+    n = len(data) // 4
+    alpha = int.from_bytes(data[_A::4], "little")
+    for off in (_B, _G, _R):
+        chan = int.from_bytes(data[off::4], "little")
+        data[off::4] = (alpha - chan).to_bytes(n, "little")
+    _write_plane_bytes(surf, data)
 
 
 def to_black_and_white(surf):
-    px, sw = _pixels(surf)
-    out = []
-    for v in px.tolist():
-        if (v >> 24) == 0:
-            out.append(v)
-            continue
-        r, g, b = pixel_to_rgb(v)
-        lum = (r * 299 + g * 587 + b * 114) // 1000
-        out.append(0xFFFFFFFF if lum >= 128 else 0xFF000000)
-    px[:] = array("I", out)
-    surf.mark_dirty()
+    """Threshold every pixel to black or white by brightness (keeps alpha)."""
+    w, h = surf.get_width(), surf.get_height()
+    orig = _plane_bytes(surf)
+    # Let cairo compute the luminosity (desaturate), then threshold it.
+    gray = copy_surface(surf)
+    cr = cairo.Context(gray)
+    cr.set_operator(cairo.OPERATOR_HSL_SATURATION)
+    cr.set_source_rgb(0.5, 0.5, 0.5)
+    cr.paint()
+    lum = _plane_bytes(gray)[_G::4]
+    alpha = orig[_A::4]
+    thr = bytes(255 if i >= 128 else 0 for i in range(256))
+    opaque_mask = alpha.translate(bytes([0] + [255] * 255))
+    value = (int.from_bytes(lum.translate(thr), "little")
+             & int.from_bytes(opaque_mask, "little")).to_bytes(w * h, "little")
+    out = bytearray(orig)
+    for off in (_B, _G, _R):
+        out[off::4] = value
+    # Semi-transparent pixels: decide on the un-premultiplied colour.
+    partial = alpha.translate(bytes([0] + [1] * 254 + [0]))
+    i = partial.find(1)
+    while i != -1:
+        a = alpha[i]
+        r, g, b = (orig[4 * i + o] * 255 // a for o in (_R, _G, _B))
+        v = a if (r * 299 + g * 587 + b * 114) // 1000 >= 128 else 0
+        for off in (_B, _G, _R):
+            out[4 * i + off] = v
+        i = partial.find(1, i + 1)
+    _write_plane_bytes(surf, out)
 
 
 def bresenham(x0, y0, x1, y1):
@@ -290,19 +305,23 @@ def bytes_to_mask(data, w, h):
     return mask
 
 
-def _matcher(target, tolerance):
-    """Bytes(1/0) flags of which pixel values are within tolerance (0..100%)."""
+def _match_bytes(surf, target, tolerance):
+    """bytes with 1 where a pixel is within tolerance (0..100%) of the
+    target ARGB value on every channel, else 0. Works on whole channel
+    planes with bytes.translate and big-integer AND (C speed)."""
     t = round(tolerance * 255 / 100)
-    if t <= 0:
-        return lambda vals: bytearray(map(target.__eq__, vals))
+    data = _plane_bytes(surf)
+    n = len(data) // 4
     if t >= 255:
-        return lambda vals: bytearray(b"\x01") * len(vals)
-    tr, tg, tb = pixel_to_rgb(target)
-    okr = [abs(i - tr) <= t for i in range(256)]
-    okg = [abs(i - tg) <= t for i in range(256)]
-    okb = [abs(i - tb) <= t for i in range(256)]
-    return lambda vals: bytearray([okr[(v >> 16) & 255] and okg[(v >> 8) & 255] and okb[v & 255]
-                                   for v in vals])
+        return bytearray(b"\x01") * n
+    want = {_A: (target >> 24) & 255, _R: (target >> 16) & 255,
+            _G: (target >> 8) & 255, _B: target & 255}
+    acc = None
+    for off, v in want.items():
+        table = bytes(1 if abs(i - v) <= t else 0 for i in range(256))
+        plane = int.from_bytes(data[off::4].translate(table), "little")
+        acc = plane if acc is None else acc & plane
+    return bytearray(acc.to_bytes(n, "little"))
 
 
 def region_mask(surf, x, y, tolerance=0):
@@ -312,10 +331,7 @@ def region_mask(surf, x, y, tolerance=0):
     if not (0 <= x < w and 0 <= y < h):
         return None
     px, sw = _pixels(surf)
-    vals = px.tolist()
-    if sw != w:  # never for ARGB32, but keep the rows tight anyway
-        vals = [v for r in range(h) for v in vals[r * sw:r * sw + w]]
-    m = _matcher(vals[y * w + x], tolerance)(vals)
+    m = _match_bytes(surf, px[y * sw + x], tolerance)
     out = bytearray(w * h)
     x0, y0, x1, y1 = x, y, x, y
     stack = [(x, y)]
@@ -351,11 +367,8 @@ def region_mask(surf, x, y, tolerance=0):
 
 def color_mask(surf, rgb):
     """A8 mask of every pixel exactly equal to rgb."""
-    w, h = surf.get_width(), surf.get_height()
-    px, sw = _pixels(surf)
-    key = rgb_to_pixel(rgb)
-    data = bytes(255 if v == key else 0 for v in px.tolist())
-    return bytes_to_mask(data, w, h)
+    m = _match_bytes(surf, rgb_to_pixel(rgb), 0)
+    return bytes_to_mask(bytes(m).translate(_ONE_TO_FF), surf.get_width(), surf.get_height())
 
 
 def similar_mask(surf, x, y, tolerance=0):
@@ -365,11 +378,7 @@ def similar_mask(surf, x, y, tolerance=0):
     if not (0 <= x < w and 0 <= y < h):
         return None
     px, sw = _pixels(surf)
-    vals = px.tolist()
-    if sw != w:
-        vals = [v for r in range(h) for v in vals[r * sw:r * sw + w]]
-    m = _matcher(vals[y * w + x], tolerance)(vals)
-    data = bytes(m).replace(b"\x01", b"\xff")
+    data = bytes(_match_bytes(surf, px[y * sw + x], tolerance)).translate(_ONE_TO_FF)
     rows = [r for r in range(h) if data.find(b"\xff", r * w, (r + 1) * w) != -1]
     if not rows:
         return None

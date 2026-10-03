@@ -15,7 +15,8 @@ from .win98 import Win98Dialog, Win98Window, make_button  # noqa: E402
 
 MAX_SIDE = 640        # frames are stored (and exported) at most this big
 INTERVAL_MS = 120     # at most one frame this often while drawing
-MAX_FRAMES = 3000     # older frames are thinned out beyond this
+MAX_FRAMES = 3000     # older frames are thinned out beyond this...
+MAX_BYTES = 192 << 20 # ...or beyond this much compressed data (photos)
 GIF_MAX_FRAMES = 300  # exported GIFs are thinned to about this many frames
 
 
@@ -63,6 +64,7 @@ class Recorder:
 
     def reset(self):
         self.frames = []
+        self.bytes = 0
         self._last = None
         self.capture()
 
@@ -82,9 +84,11 @@ class Recorder:
             return
         self._last = key
         self.frames.append(frame)
-        if len(self.frames) > MAX_FRAMES:
+        self.bytes += len(frame.data)
+        while len(self.frames) > 3 and (len(self.frames) > MAX_FRAMES or self.bytes > MAX_BYTES):
             # Keep the first and last frames, drop every other one in between.
             self.frames = [self.frames[0]] + self.frames[1:-1:2] + [self.frames[-1]]
+            self.bytes = sum(len(f.data) for f in self.frames)
 
     def snapshot(self):
         """Frames including the current state (flushes a pending capture)."""

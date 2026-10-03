@@ -36,6 +36,7 @@ class DropDown(Gtk.EventBox):
 
     __gsignals__ = {
         "changed": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
+        "done": (GObject.SignalFlags.RUN_FIRST, None, ()),
     }
 
     def __init__(self, items, active, width, rows=LIST_ROWS):
@@ -61,6 +62,7 @@ class DropDown(Gtk.EventBox):
         pop = Gtk.Popover.new(self)
         pop.set_position(Gtk.PositionType.BOTTOM)
         pop.get_style_context().add_class("dropdown-popup")
+        pop.connect("closed", lambda *a: self.emit("done"))
         sw = Gtk.ScrolledWindow()
         sw.set_overlay_scrolling(False)
         sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -105,6 +107,7 @@ class DropDown(Gtk.EventBox):
         self.set_active(self.items[row.get_index()])
         self.popover.popdown()
         self.emit("changed", self.active)
+        self.emit("done")
 
     def set_active(self, value):
         self.active = value
@@ -128,10 +131,14 @@ class TextToolbar(Gtk.Box):
 
         self.family = DropDown(families, state.font_family, 170)
         self.family.connect("changed", lambda w, v: self.state.set_option("font_family", v))
+        # Give the keyboard back to the text box after picking from a list.
+        self.refocus = lambda: None
+        self.family.connect("done", lambda *a: self.refocus())
         self.pack_start(self.family, False, False, 0)
 
         self.size = DropDown([str(s) for s in SIZES], str(state.font_size), 44)
         self.size.connect("changed", lambda w, v: self.state.set_option("font_size", int(v)))
+        self.size.connect("done", lambda *a: self.refocus())
         self.pack_start(self.size, False, False, 0)
 
         self.toggles = {}
@@ -143,6 +150,7 @@ class TextToolbar(Gtk.Box):
             lbl.set_markup(markup)
             b.add(lbl)
             b.get_style_context().add_class("toolbutton")
+            b.set_can_focus(False)  # keep the caret in the text box
             b.set_active(getattr(state, attr))
             b.connect("toggled", self.on_toggle, attr)
             b.set_tooltip_text({"font_bold": "Bold", "font_italic": "Italic",

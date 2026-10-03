@@ -62,7 +62,9 @@ def map_points(pts, m):
     out = []
     for x, y in pts:
         X, Y = m.transform_point(x + 0.5, y + 0.5)
-        out.append((int(round(X - 0.5)), int(round(Y - 0.5))))
+        # floor, not round: on canvases with mixed odd/even sides mapped
+        # centres land exactly on .5 and round-half-to-even drops pixels.
+        out.append((math.floor(X + 1e-9), math.floor(Y + 1e-9)))
     return out
 
 

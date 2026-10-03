@@ -16,7 +16,7 @@ gi.require_version("Pango", "1.0")
 gi.require_version("PangoCairo", "1.0")
 from gi.repository import GLib, Pango, PangoCairo  # noqa: E402
 
-from . import pixmaps  # noqa: E402
+from . import imageops, pixmaps  # noqa: E402
 from .stickerart import CLASSIC, EXTRA  # noqa: E402
 
 EMOJI_FONT = "Noto Color Emoji"
@@ -158,16 +158,22 @@ def render(sid, size):
 
 
 def crop_to_content(surf):
-    """Trim fully transparent borders."""
-    surf.flush()
+    """Trim fully transparent borders (row scans run on alpha bytes)."""
     w, h = surf.get_width(), surf.get_height()
-    px = surf.get_data().cast("I")
-    sw = surf.get_stride() // 4
-    rows = [y for y in range(h) if any(px[y * sw + x] >> 24 for x in range(w))]
+    alpha = imageops.alpha_mask(surf)
+    alpha.flush()
+    data, stride = bytes(alpha.get_data()), alpha.get_stride()
+    x0, x1, rows = w, -1, []
+    for y in range(h):
+        row = data[y * stride:y * stride + w]
+        core = row.strip(b"\x00")
+        if core:
+            rows.append(y)
+            x0 = min(x0, len(row) - len(row.lstrip(b"\x00")))
+            x1 = max(x1, len(row.rstrip(b"\x00")) - 1)
     if not rows:
         return None
-    cols = [x for x in range(w) if any(px[y * sw + x] >> 24 for y in rows)]
-    x0, x1, y0, y1 = cols[0], cols[-1], rows[0], rows[-1]
+    y0, y1 = rows[0], rows[-1]
     out = cairo.ImageSurface(cairo.FORMAT_ARGB32, x1 - x0 + 1, y1 - y0 + 1)
     cr = cairo.Context(out)
     cr.set_source_surface(surf, -x0, -y0)

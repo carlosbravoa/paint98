@@ -27,26 +27,27 @@ def _pixels(surf):
 # ---------------------------------------------------------------------------
 
 def _median_cut(hist, n=256):
-    """hist: list of (rgb_int, count). Returns (palette, colour->index)."""
-    boxes = [list(hist)]
+    """hist: list of (rgb_int, count). Returns (palette, colour->index).
 
-    def spread(box):
-        best = (-1, 0)
+    Each box's channel spread is computed once, when the box is created, so
+    the cost is about n * (number of colours) instead of n^2 * colours."""
+
+    def make_box(items):
+        best_rng, best_shift = -1, 0
         for shift in (16, 8, 0):
-            vals = [(c >> shift) & 255 for c, _ in box]
+            vals = [(c >> shift) & 255 for c, _ in items]
             rng = max(vals) - min(vals)
-            if rng > best[0]:
-                best = (rng, shift)
-        return best
+            if rng > best_rng:
+                best_rng, best_shift = rng, shift
+        return [best_rng if len(items) > 1 else 0, best_shift, items]
 
+    boxes = [make_box(list(hist))]
     while len(boxes) < n:
-        # Split the box with the widest channel range (weighted by size).
-        scored = [(spread(b)[0] * (len(b) > 1), i) for i, b in enumerate(boxes)]
-        score, i = max(scored)
+        i = max(range(len(boxes)), key=lambda k: boxes[k][0])
+        score, shift, box = boxes[i]
         if score <= 0:
             break
-        box = boxes.pop(i)
-        _, shift = spread(box)
+        boxes.pop(i)
         box.sort(key=lambda e: (e[0] >> shift) & 255)
         total = sum(cnt for _, cnt in box)
         acc, cut = 0, 1
@@ -55,9 +56,9 @@ def _median_cut(hist, n=256):
             if acc >= total / 2:
                 cut = max(1, min(len(box) - 1, j + 1))
                 break
-        boxes += [box[:cut], box[cut:]]
+        boxes += [make_box(box[:cut]), make_box(box[cut:])]
     palette, mapping = [], {}
-    for idx, box in enumerate(boxes):
+    for idx, (_, _, box) in enumerate(boxes):
         total = sum(cnt for _, cnt in box) or 1
         r = sum(((c >> 16) & 255) * cnt for c, cnt in box) // total
         g = sum(((c >> 8) & 255) * cnt for c, cnt in box) // total
@@ -68,11 +69,26 @@ def _median_cut(hist, n=256):
     return palette, mapping
 
 
+# Above this many distinct colours (photos), colours are first grouped into
+# 15-bit buckets so building the palette stays fast.
+_REDUCE_ABOVE = 4096
+_REDUCE_MASK = 0xF8F8F8
+
+
 def build_palette(counter):
+    """Returns (palette, index_of) where index_of maps a colour to an index."""
     if len(counter) <= 256:
         palette = list(counter)
-        return palette, {c: i for i, c in enumerate(palette)}
-    return _median_cut(counter.most_common())
+        exact = {c: i for i, c in enumerate(palette)}
+        return palette, exact.__getitem__
+    if len(counter) > _REDUCE_ABOVE:
+        reduced = Counter()
+        for c, cnt in counter.items():
+            reduced[c & _REDUCE_MASK] += cnt
+        palette, mapping = _median_cut(reduced.most_common())
+        return palette, lambda c: mapping[c & _REDUCE_MASK]
+    palette, mapping = _median_cut(counter.most_common())
+    return palette, mapping.__getitem__
 
 
 def _nearest(palette, c):
@@ -192,7 +208,8 @@ def write_gif(path, frames, total, delay_cs=5, last_delay_cs=300, progress=None)
         count += 1
         if progress:
             progress(0.3 * count / max(1, total))
-    palette, mapping = build_palette(counter)
+    palette, index_of = build_palette(counter)
+    mapping = {}
     total = count
 
     with open(path, "wb") as f:
@@ -210,7 +227,10 @@ def write_gif(path, frames, total, delay_cs=5, last_delay_cs=300, progress=None)
                 f.write(b"\x21\xFF\x0BNETSCAPE2.0\x03\x01\x00\x00\x00")
             for c in set(vals):
                 if c not in mapping:
-                    mapping[c] = _nearest(palette, c)
+                    try:
+                        mapping[c] = index_of(c)
+                    except KeyError:
+                        mapping[c] = _nearest(palette, c)
             cur = bytes(map(mapping.__getitem__, vals))
             if prev is None:
                 box = (0, 0, w - 1, h - 1)

@@ -58,7 +58,7 @@ def number_entry(value, width=5):
 def entry_int(e, default):
     try:
         return int(float(e.get_text().strip()))
-    except ValueError:
+    except (ValueError, OverflowError):
         return default
 
 
@@ -110,7 +110,7 @@ class AttributesDialog(Win98Dialog):
             w = float(self.w_entry.get_text()) * f
             h = float(self.h_entry.get_text()) * f
             return max(1, round(w)), max(1, round(h))
-        except ValueError:
+        except (ValueError, OverflowError):
             return self.px
 
     def _show(self):
@@ -626,12 +626,13 @@ HELP_TOPICS = [
      "On the File menu click Set As Wallpaper (Tiled) or Set As Wallpaper (Centered) to "
      "use the current picture as your GNOME desktop background. Save the picture first."),
     ("Keyboard shortcuts",
-     "CTRL+N New      CTRL+O Open      CTRL+S Save\nCTRL+Z Undo     CTRL+Y Repeat\n"
+     "CTRL+N New      CTRL+O Open      CTRL+S Save\nCTRL+Z Undo     F4 Repeat\n"
      "CTRL+X Cut      CTRL+C Copy     CTRL+V Paste    DEL Clear Selection\n"
-     "CTRL+A Select All\nCTRL+R Flip/Rotate   CTRL+W Stretch/Skew   CTRL+I Invert Colors\n"
-     "CTRL+E Attributes   CTRL+SHIFT+N Clear Image\nCTRL+T Tool Box   CTRL+L Color Box\n"
+     "CTRL+L Select All\nCTRL+R Flip/Rotate   CTRL+W Stretch/Skew   CTRL+I Invert Colors\n"
+     "CTRL+SHIFT+F Recolor Selection\n"
+     "CTRL+E Attributes   CTRL+SHIFT+N Clear Image\nCTRL+T Tool Box   CTRL+A Color Box\n"
      "CTRL+PAGE UP Normal Size   CTRL+PAGE DOWN Large Size   CTRL+G Show Grid\n"
-     "CTRL+F View Bitmap"),
+     "CTRL+F View Bitmap   CTRL+B Sticker Book   CTRL+SHIFT+R Replay"),
 ]
 
 

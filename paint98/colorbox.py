@@ -23,6 +23,8 @@ def _rgb(c):
 class ColorBox(Gtk.DrawingArea):
     __gsignals__ = {
         "edit-color": (GObject.SignalFlags.RUN_FIRST, None, (int,)),
+        # The palette cell last clicked (used by Options > Edit Colors).
+        "palette-index": (GObject.SignalFlags.RUN_FIRST, None, (int,)),
         "hint": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
     }
 
@@ -127,6 +129,7 @@ class ColorBox(Gtk.DrawingArea):
         if i is None:
             return True
         color = self.state.palette[i]
+        self.emit("palette-index", i)
         if ev.type == Gdk.EventType._2BUTTON_PRESS and ev.button == 1 and not is_fun(color):
             self.emit("edit-color", i)
             return True

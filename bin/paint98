@@ -5,8 +5,9 @@ if [ -n "$SNAP" ]; then
     PLATFORM="$SNAP/gnome-platform/usr"
     PY="$(ls "$PLATFORM"/bin/python3.* 2>/dev/null | grep -E 'python3\.[0-9]+$' | head -n 1)"
     export PYTHONPATH="$SNAP/lib/paint98:$PLATFORM/lib/python3/dist-packages${PYTHONPATH:+:$PYTHONPATH}"
-    exec "$PY" -m paint98 "$@"
+    # -P: never import a "paint98" folder from the current directory.
+    exec "$PY" -P -m paint98 "$@"
 fi
 HERE="$(dirname "$(readlink -f "$0")")"
 export PYTHONPATH="$HERE/..${PYTHONPATH:+:$PYTHONPATH}"
-exec python3 -m paint98 "$@"
+exec python3 -P -m paint98 "$@"

@@ -30,6 +30,7 @@ def surface_to_pixbuf(surf):
 
 def pixbuf_to_surface(pb, background=(255, 255, 255)):
     w, h = pb.get_width(), pb.get_height()
+    imageops.check_size(w, h)
     surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
     cr = cairo.Context(surf)
     if background is not None:
@@ -53,6 +54,7 @@ class Document(GObject.Object):
         super().__init__()
         self.filename = None
         self.modified = False
+        self.monochrome = False  # converted to black and white (Attributes)
         self.undo_stack = []
         self.redo_stack = []
         self.surface = imageops.new_surface(width, height, (255, 255, 255))
@@ -91,6 +93,18 @@ class Document(GObject.Object):
         self.emit("changed")
         self.emit("state-changed")
         return True
+
+    def discard_last_change(self):
+        """Throw away the change since the last undo snapshot (a cancelled
+        stroke), without making it redoable."""
+        if not self.undo_stack:
+            return
+        old_size = (self.width, self.height)
+        self.surface = self.undo_stack.pop()
+        if old_size != (self.width, self.height):
+            self.emit("size-changed")
+        self.emit("changed")
+        self.emit("state-changed")
 
     def undo(self):
         return self._swap(self.undo_stack, self.redo_stack)
@@ -136,6 +150,7 @@ class Document(GObject.Object):
     def new(self, w, h):
         self.surface = imageops.new_surface(w, h, (255, 255, 255))
         self.filename = None
+        self.monochrome = False
         self.undo_stack.clear()
         self.redo_stack.clear()
         self.modified = False
@@ -146,10 +161,18 @@ class Document(GObject.Object):
 
     # -- files ---------------------------------------------------------------
     def load(self, path):
+        """Replace the picture with a file. Raises GLib.Error for unreadable
+        files and imageops.TooBig for pictures over the size limit; the
+        current picture is untouched in both cases."""
+        info = GdkPixbuf.Pixbuf.get_file_info(path)
+        if info and info[0] is not None:
+            imageops.check_size(info[1], info[2])
         pb = GdkPixbuf.Pixbuf.new_from_file(path)
         pb = pb.apply_embedded_orientation() or pb
+        imageops.check_size(pb.get_width(), pb.get_height())
         self.surface = pixbuf_to_surface(pb)
         self.filename = path
+        self.monochrome = False
         self.undo_stack.clear()
         self.redo_stack.clear()
         self.modified = False
@@ -163,8 +186,8 @@ class Document(GObject.Object):
         ext = os.path.splitext(path)[1].lower()
         return SAVE_FORMATS.get(ext)
 
-    def save(self, path, surface=None):
-        fmt = self.format_for(path) or "png"
+    def save(self, path, surface=None, fmt=None):
+        fmt = fmt or self.format_for(path) or "png"
         surf = surface or self.surface
         pb = surface_to_pixbuf(surf)
         if fmt in ("jpeg", "bmp"):

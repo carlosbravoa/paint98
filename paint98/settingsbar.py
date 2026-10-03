@@ -154,13 +154,29 @@ class ValueControl(Gtk.Box):
         self.unit = Gtk.Label(label=unit, xalign=0)
         self.unit.set_width_chars(2)
         self.pack_start(self.unit, False, False, 0)
+        self._syncing = False
         self.track.connect("value-changed", self.on_track)
         self.entry.connect("activate", self.on_entry)
         self.entry.connect("focus-out-event", lambda *a: self.on_entry() or False)
+        # Apply typed numbers right away, so switching tools never loses them.
+        self.entry.connect("changed", self.on_typed)
 
     def on_track(self, track, value):
+        self._syncing = True
         self.entry.set_text(str(value))
+        self._syncing = False
         self.emit("value-changed", value)
+
+    def on_typed(self, entry):
+        if self._syncing:
+            return
+        try:
+            v = int(entry.get_text().strip().rstrip("%"))
+        except ValueError:
+            return
+        if self.lo <= v <= self.hi and v != self.track.value:
+            self.track.set_value(v, emit=False)
+            self.emit("value-changed", v)
 
     def on_entry(self, *a):
         try:
@@ -174,7 +190,10 @@ class ValueControl(Gtk.Box):
 
     def set_value(self, value):
         self.track.set_value(value, emit=False)
-        self.entry.set_text(str(value))
+        if self.entry.get_text() != str(value):
+            self._syncing = True
+            self.entry.set_text(str(value))
+            self._syncing = False
 
     def set_range(self, lo, hi):
         self.lo, self.hi = lo, hi
@@ -194,7 +213,7 @@ class ToolSettingsPanel(Gtk.Box):
         self.get_style_context().add_class("tool-settings")
         self.set_valign(Gtk.Align.CENTER)
         self.set_size_request(260, 44)
-        self.opacity = ValueControl("_Opacity:", 1, 100, 100)
+        self.opacity = ValueControl("O_pacity:", 1, 100, 100)
         self.opacity.connect("value-changed", lambda w, v: self.state.set_opacity(self.state.tool, v))
         self.size = ValueControl("Si_ze:", 1, 64, 1, "px")
         self.size.connect("value-changed", lambda w, v: self.state.set_tool_size(self.state.tool, v))

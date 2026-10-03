@@ -37,6 +37,60 @@ IMAGE_FILTERS = [
 ]
 
 
+def display_path(path):
+    """A file name made safe to show (names need not be valid UTF-8)."""
+    return os.fsencode(path).decode("utf-8", "replace")
+
+
+def in_document_portal(path):
+    """True for files handed to the (confined) app by the file chooser
+    portal: only that exact file may be written."""
+    runtime = os.environ.get("XDG_RUNTIME_DIR", "")
+    return bool(runtime) and path.startswith(os.path.join(runtime, "doc") + os.sep)
+
+
+BOOL_KEYS = ("toolbox", "colorbox", "statusbar", "settingsbar", "textbar")
+STR_KEYS = ("palette_mode", "last_plain", "symmetry", "eraser_shape")
+
+
+def clean_settings(cfg):
+    """Keep only well-formed settings so a damaged file can't break start-up."""
+    if not isinstance(cfg, dict):
+        return {}
+    out = {}
+
+    def is_int(v):
+        return isinstance(v, int) and not isinstance(v, bool)
+
+    for k in BOOL_KEYS:
+        if isinstance(cfg.get(k), bool):
+            out[k] = cfg[k]
+    for k in STR_KEYS:
+        if isinstance(cfg.get(k), str):
+            out[k] = cfg[k]
+    ws = cfg.get("window_size")
+    if isinstance(ws, (list, tuple)) and len(ws) == 2 and all(is_int(v) and 100 <= v <= 20000 for v in ws):
+        out["window_size"] = list(ws)
+    if isinstance(cfg.get("recent"), list):
+        out["recent"] = [p for p in cfg["recent"] if isinstance(p, str)][:MAX_RECENT]
+    pal = cfg.get("custom_palette")
+    if isinstance(pal, list) and len(pal) == 28 and all(isinstance(h, str) and len(h) == 6 for h in pal):
+        try:
+            [int(h, 16) for h in pal]
+            out["custom_palette"] = pal
+        except ValueError:
+            pass
+    if isinstance(cfg.get("opacity"), dict):
+        out["opacity"] = {k: v for k, v in cfg["opacity"].items() if isinstance(k, str) and is_int(v)}
+    for k in ("tolerance", "fill_mode"):
+        if is_int(cfg.get(k)):
+            out[k] = cfg[k]
+    for k in ("sizes", "sticker"):
+        if isinstance(cfg.get(k), dict):
+            out[k] = cfg[k]
+    return out
+
+
 def config_path():
     return os.path.join(GLib.get_user_config_dir(), "paint98", "settings.json")
 
@@ -133,7 +187,8 @@ class ThumbnailWindow(Win98Window):
         canvas.doc.connect("changed", lambda *a: self.area.queue_draw())
         for adj in (canvas.hadj, canvas.vadj):
             adj.connect("value-changed", lambda *a: self.area.queue_draw())
-        self.connect("delete-event", lambda *a: self.hide() or True)
+        self.set_destroy_with_parent(True)
+        self.connect("delete-event", lambda *a: self.request_close() or True)
 
     def request_close(self):
         self.hide()
@@ -151,6 +206,65 @@ class ThumbnailWindow(Win98Window):
         cr.get_source().set_filter(cairo.FILTER_NEAREST)
         cr.rectangle(0, 0, c.doc.width - x, c.doc.height - y)
         cr.fill()
+        return True
+
+
+class PrintPreviewWindow(Win98Window):
+    """Print Preview drawn by Paint98 itself (the system previewer is not
+    available to a confined snap): the page with the picture as it will be
+    printed, plus Print and Close buttons."""
+
+    def __init__(self, main):
+        super().__init__("%s - Print Preview" % display_path(main.doc.display_name),
+                         buttons=("close",), icon=True)
+        self.main = main
+        self.set_transient_for(main)
+        self.set_destroy_with_parent(True)
+        self.set_modal(True)
+        self.set_default_size(560, 640)
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        row.set_border_width(6)
+        row.pack_start(win98.make_button("_Print...", self.on_print, default=True), False, False, 0)
+        row.pack_start(win98.make_button("Page Set_up...", self.on_setup), False, False, 0)
+        row.pack_end(win98.make_button("_Close", self.close), False, False, 0)
+        self.body.pack_start(row, False, False, 0)
+        self.area = Gtk.DrawingArea()
+        self.area.set_size_request(380, 480)
+        self.area.connect("draw", self.on_draw)
+        self.body.pack_start(self.area, True, True, 0)
+
+    def on_print(self):
+        self.close()
+        self.main.on_print()
+
+    def on_setup(self):
+        self.main.on_page_setup()
+        self.area.queue_draw()
+
+    def on_draw(self, w, cr):
+        width, height = w.get_allocated_width(), w.get_allocated_height()
+        cr.set_source_rgb(*win98.SHADOW)
+        cr.paint()
+        setup = self.main.page_setup or Gtk.PageSetup()
+        pt = Gtk.Unit.POINTS
+        paper_w, paper_h = setup.get_paper_width(pt), setup.get_paper_height(pt)
+        left, top = setup.get_left_margin(pt), setup.get_top_margin(pt)
+        area_w, area_h = setup.get_page_width(pt), setup.get_page_height(pt)
+        scale = min((width - 40) / paper_w, (height - 40) / paper_h)
+        ox = (width - paper_w * scale) / 2
+        oy = (height - paper_h * scale) / 2
+        cr.set_source_rgb(0, 0, 0)
+        cr.rectangle(int(ox) + 3, int(oy) + 3, int(paper_w * scale), int(paper_h * scale))
+        cr.fill()
+        cr.set_source_rgb(1, 1, 1)
+        cr.rectangle(int(ox), int(oy), int(paper_w * scale), int(paper_h * scale))
+        cr.fill()
+        pic = self.main.picture_rect_on_page(area_w, area_h)
+        cr.translate(ox + left * scale, oy + top * scale)
+        cr.scale(scale * pic, scale * pic)
+        cr.set_source_surface(self.main.doc.surface, 0, 0)
+        cr.get_source().set_filter(cairo.FILTER_GOOD)
+        cr.paint()
         return True
 
 
@@ -209,6 +323,7 @@ class MainWindow(Win98Window):
         self.body.pack_start(sep, False, False, 0)
 
         self.textbar = TextToolbar(self.state)
+        self.textbar.refocus = lambda: self.canvas.grab_focus()
         self.textbar.set_no_show_all(True)
         self.body.pack_start(self.textbar, False, False, 0)
 
@@ -261,7 +376,7 @@ class MainWindow(Win98Window):
     def load_settings(self):
         try:
             with open(config_path()) as f:
-                return json.load(f)
+                return clean_settings(json.load(f))
         except (OSError, ValueError):
             return {}
 
@@ -282,10 +397,12 @@ class MainWindow(Win98Window):
             if isinstance(stk.get("current"), str) and stickers.exists(stk["current"]):
                 st.sticker = stk["current"]
             st.sticker_size = max(8, min(256, int(stk.get("size", st.sticker_size))))
-            recent = [s for s in stk.get("recent", []) if isinstance(s, str) and stickers.exists(s)]
+            recent = stk.get("recent", [])
+            recent = [s for s in recent if isinstance(s, str) and stickers.exists(s)] \
+                if isinstance(recent, list) else []
             if recent:
                 st.sticker_recent = recent[:6]
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, AttributeError):
             pass
         if cfg.get("symmetry") in [m for m, _, _ in symmetry.MODES]:
             st.symmetry = cfg["symmetry"]
@@ -308,7 +425,7 @@ class MainWindow(Win98Window):
                 if tool in sizes:
                     lo, hi = st.SIZE_LIMITS[tool]
                     setattr(st, st.SIZE_ATTRS[tool], max(lo, min(hi, int(sizes[tool]))))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, AttributeError):
             pass
 
     def store_tool_settings(self):
@@ -569,7 +686,7 @@ class MainWindow(Win98Window):
         pos = menu.get_children().index(sep)
         recent = self.settings.get("recent", [])
         for i, path in enumerate(recent[:MAX_RECENT]):
-            label = "_%d %s" % (i + 1, os.path.basename(path).replace("_", "__"))
+            label = "_%d %s" % (i + 1, display_path(os.path.basename(path)).replace("_", "__"))
             item = Gtk.MenuItem.new_with_mnemonic(label)
             item.connect("activate", lambda w, p=path: self.open_path(p, confirm=True))
             item.connect("select", lambda w: self.set_hint("Opens this document."))
@@ -583,6 +700,12 @@ class MainWindow(Win98Window):
             menu.insert(extra, pos)
             extra.show()
             self.recent_items.append(extra)
+
+    def forget_recent(self, path):
+        recent = self.settings.get("recent", [])
+        if path in recent:
+            self.settings["recent"] = [p for p in recent if p != path]
+            self.refresh_recent()
 
     def add_recent(self, path):
         recent = [p for p in self.settings.get("recent", []) if p != path]
@@ -657,7 +780,7 @@ class MainWindow(Win98Window):
         self.toolbox.connect("hint", lambda w, t: self.set_hint(t))
         self.colorbox.connect("hint", lambda w, t: self.set_hint(t))
         self.colorbox.connect("edit-color", lambda w, i: self.on_edit_colors(i))
-        self.colorbox.connect("button-press-event", self.on_colorbox_press)
+        self.colorbox.connect("palette-index", self.on_palette_index)
         self.canvas.connect("pointer-info", self.on_pointer)
         self.canvas.connect("size-info", self.on_size_info)
         self.canvas.connect("text-box-changed", lambda *a: self.update_textbar())
@@ -676,14 +799,26 @@ class MainWindow(Win98Window):
         self.canvas.connect("selection-changed", self.on_selection_for_book)
         self.refresh_sensitivity()
 
-    def on_colorbox_press(self, w, ev):
-        i = self.colorbox.index_at(ev.x, ev.y)
-        if i is not None:
-            self.palette_index = i
-        return False
+    def on_palette_index(self, colorbox, index):
+        self.palette_index = index
 
     def on_key(self, w, ev):
-        return self.canvas.handle_key(ev)
+        if self.canvas.handle_key(ev):
+            return True
+        focus = self.get_focus()
+        if isinstance(focus, Gtk.Editable):
+            # A number box has the focus: let it have the key before any
+            # menu shortcut (Delete, Ctrl+Z...) acts on the picture.
+            if self.propagate_key_event(ev):
+                return True
+            if ev.keyval in (Gdk.KEY_Tab, Gdk.KEY_ISO_Left_Tab):
+                return False
+            ctrl_alt = ev.state & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.MOD1_MASK)
+            if not ctrl_alt:
+                return True
+            if ev.state & Gdk.ModifierType.CONTROL_MASK and Gdk.keyval_to_lower(ev.keyval) in (Gdk.KEY_z, Gdk.KEY_y):
+                return True
+        return False
 
     def on_pointer(self, canvas, x, y, inside):
         self.pos_label.set_text("%d,%d" % (x, y) if inside else "")
@@ -692,7 +827,7 @@ class MainWindow(Win98Window):
         self.size_label.set_text("%dx%d" % (w, h) if valid else "")
 
     def update_title(self):
-        self.set_title("%s - Paint98" % self.doc.display_name)
+        self.set_title("%s - Paint98" % display_path(self.doc.display_name))
 
     def update_textbar(self):
         show = self.canvas.text_active() and self.settings.get("textbar", True)
@@ -753,14 +888,20 @@ class MainWindow(Win98Window):
 
     # -- closing / confirmation ---------------------------------------------------
     def confirm_discard(self):
-        self.canvas.commit_all()
-        if not self.doc.modified:
+        """Ask before throwing work away. Nothing is committed unless the
+        user chooses to save; Cancel leaves everything exactly as it was."""
+        pending = self.canvas.has_pending_work()
+        if not self.doc.modified and not pending:
             return True
         res = message_box(self, "Paint98", "Save changes to %s?" % self.doc.display_name,
                           ("Yes", "No", "Cancel"))
         if res == 0:
+            self.canvas.commit_all()
             return self.on_save()
-        return res == 1
+        if res == 1:
+            self.canvas.discard_pending()
+            return True
+        return False
 
     def on_delete(self, *a):
         if not self.confirm_discard():
@@ -802,10 +943,24 @@ class MainWindow(Win98Window):
                 dlg.set_current_folder(os.path.dirname(self.doc.filename))
         res = dlg.run()
         path = dlg.get_filename() if res == Gtk.ResponseType.ACCEPT else None
-        if path and action == Gtk.FileChooserAction.SAVE and not os.path.splitext(path)[1]:
-            flt = dlg.get_filter()
-            path += chosen.get(flt.get_name() if flt else "", filters[0][2])
+        flt = dlg.get_filter()
         dlg.destroy()
+        if path and action == Gtk.FileChooserAction.SAVE and not os.path.splitext(path)[1]:
+            ext = chosen.get(flt.get_name() if flt else "", filters[0][2])
+            # Under the file chooser portal only the exact chosen name may be
+            # written, so the file keeps that name (the format still follows
+            # the chosen file type). Elsewhere add the extension, asking
+            # before replacing a file the chooser didn't check.
+            self.save_format_hint = ext
+            if not in_document_portal(path):
+                candidate = path + ext
+                if os.path.exists(candidate):
+                    res = message_box(self, title, "%s already exists.\nDo you want to replace it?"
+                                      % display_path(os.path.basename(candidate)), ("Yes", "No"),
+                                      default=1)
+                    if res != 0:
+                        return None
+                path = candidate
         return path
 
     def on_new(self):
@@ -825,12 +980,18 @@ class MainWindow(Win98Window):
         if confirm and not self.confirm_discard():
             return False
         try:
-            self.canvas.discard_selection()
             self.doc.load(path)
-            self.add_recent(path)
-        except GLib.Error as e:
+        except imageops.TooBig as e:
+            self.error("Paint98 cannot open %s.\n\n%s" % (display_path(path), e))
+            return False
+        except (GLib.Error, cairo.Error, MemoryError) as e:
+            msg = getattr(e, "message", None) or str(e)
             self.error("Paint98 cannot read this file.\n%s\nThis is not a valid bitmap file, or its "
-                       "format is not currently supported.\n\n%s" % (path, e.message))
+                       "format is not currently supported.\n\n%s" % (display_path(path), msg))
+            self.forget_recent(path)
+            return False
+        self.canvas.discard_selection()
+        self.add_recent(path)
         return False
 
     def on_save(self):
@@ -839,19 +1000,44 @@ class MainWindow(Win98Window):
             return self.on_save_as()
         return self.save_to(self.doc.filename)
 
+    def check_save_name(self, path):
+        """Refuse names whose extension Paint98 can't write (e.g. .gif),
+        instead of putting PNG data under that name."""
+        ext = os.path.splitext(path)[1]
+        if ext and not Document.format_for(path):
+            self.error("Paint98 cannot save pictures as %s files.\n\n"
+                       "Please choose PNG, BMP, JPEG or TIFF." % display_path(ext))
+            return False
+        return True
+
+    def save_format(self, path):
+        """Format for a path; files without an extension use the type that
+        was picked in the file chooser."""
+        fmt = Document.format_for(path)
+        if fmt is None and not os.path.splitext(path)[1]:
+            fmt = Document.format_for("x" + getattr(self, "save_format_hint", ".png"))
+        return fmt or "png"
+
     def on_save_as(self):
         self.canvas.commit_all()
-        name = os.path.basename(self.doc.filename) if self.doc.filename else "untitled.png"
+        if self.doc.filename:
+            name = display_path(os.path.basename(self.doc.filename))
+            if not Document.format_for(name):
+                name = os.path.splitext(name)[0] + ".png"
+        else:
+            name = "untitled.png"
         path = self.file_dialog("Save As", Gtk.FileChooserAction.SAVE, name)
         if not path:
             return False
         return self.save_to(path)
 
     def save_to(self, path):
+        if not self.check_save_name(path):
+            return False
         try:
-            self.doc.save(path)
-        except GLib.Error as e:
-            self.error("Paint98 cannot save this file.\n\n%s" % e.message)
+            self.doc.save(path, fmt=self.save_format(path))
+        except (GLib.Error, OSError) as e:
+            self.error("Paint98 cannot save this file.\n\n%s" % (getattr(e, "message", None) or e))
             return False
         self.add_recent(path)
         return True
@@ -873,9 +1059,7 @@ class MainWindow(Win98Window):
         surf = self.doc.surface
         w, h = surf.get_width(), surf.get_height()
         pw, ph = ctx.get_width(), ctx.get_height()
-        # 96 pixels per inch converted to the context's resolution.
-        scale = ctx.get_dpi_x() / 96.0
-        scale = min(scale, pw / w, ph / h)
+        scale = self.picture_rect_on_page(pw, ph, ctx.get_dpi_x())
         cr.scale(scale, scale)
         cr.set_source_surface(surf, 0, 0)
         cr.get_source().set_filter(cairo.FILTER_NEAREST)
@@ -890,7 +1074,14 @@ class MainWindow(Win98Window):
 
     def on_print_preview(self):
         self.canvas.commit_all()
-        self._print_op().run(Gtk.PrintOperationAction.PREVIEW, self)
+        PrintPreviewWindow(self).show_all()
+
+    def picture_rect_on_page(self, page_w, page_h, dpi=72.0):
+        """Where the picture goes on a printable area (same rule as printing):
+        96 pixels per inch, shrunk to fit."""
+        w, h = self.doc.width, self.doc.height
+        scale = min(dpi / 96.0, page_w / w, page_h / h)
+        return scale
 
     def on_page_setup(self):
         if self.print_settings is None:
@@ -964,6 +1155,11 @@ class MainWindow(Win98Window):
         self.canvas.create_selection(0, 0, self.doc.width, self.doc.height)
 
     def float_pixbuf(self, pb):
+        try:
+            imageops.check_size(pb.get_width(), pb.get_height())
+        except imageops.TooBig as e:
+            self.error("Paint98 cannot paste this picture.\n\n%s" % e)
+            return
         surf = pixbuf_to_surface(pb, self.state.bg)
         w, h = surf.get_width(), surf.get_height()
         if w > self.doc.width or h > self.doc.height:
@@ -972,7 +1168,9 @@ class MainWindow(Win98Window):
                               "Would you like the bitmap enlarged?", ("Yes", "No", "Cancel"))
             if res == 0:
                 self.canvas.commit_all()
-                self.doc.resize(max(w, self.doc.width), max(h, self.doc.height), self.state.bg)
+                if not self.guard(self.doc.resize, max(w, self.doc.width), max(h, self.doc.height),
+                                  self.state.bg):
+                    return
             elif res != 1:
                 return
         x, y = self.canvas.visible_origin()
@@ -980,6 +1178,12 @@ class MainWindow(Win98Window):
 
     def on_paste(self):
         clip = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+        if self.canvas.text_active():
+            # Typing text: paste text into the text box, like the original.
+            text = clip.wait_for_text()
+            if text:
+                self.canvas.tool.insert(text)
+            return
         pb = clip.wait_for_image()
         if pb is not None:
             self.float_pixbuf(pb)
@@ -989,20 +1193,25 @@ class MainWindow(Win98Window):
         if surf is None:
             return
         path = self.file_dialog("Copy To", Gtk.FileChooserAction.SAVE, "untitled.png")
-        if path:
+        if path and self.check_save_name(path):
             try:
-                self.doc.save(path, surface=surf)
-            except GLib.Error as e:
-                self.error("Paint98 cannot save this file.\n\n%s" % e.message)
+                self.doc.save(path, surface=surf, fmt=self.save_format(path))
+            except (GLib.Error, OSError) as e:
+                self.error("Paint98 cannot save this file.\n\n%s" % (getattr(e, "message", None) or e))
 
     def on_paste_from(self):
         path = self.file_dialog("Paste From", Gtk.FileChooserAction.OPEN)
         if not path:
             return
         try:
+            _, w, h = GdkPixbuf.Pixbuf.get_file_info(path)
+            imageops.check_size(w, h)
             pb = GdkPixbuf.Pixbuf.new_from_file(path)
-        except GLib.Error as e:
-            self.error("Paint98 cannot read this file.\n\n%s" % e.message)
+        except imageops.TooBig as e:
+            self.error("Paint98 cannot paste this picture.\n\n%s" % e)
+            return
+        except (GLib.Error, TypeError) as e:
+            self.error("Paint98 cannot read this file.\n\n%s" % (getattr(e, "message", None) or e))
             return
         self.float_pixbuf(pb)
 
@@ -1028,7 +1237,9 @@ class MainWindow(Win98Window):
     def on_replay(self):
         self.canvas.commit_all()
         frames = self.recorder.snapshot()
-        ReplayWindow(self, frames, lambda win: self.save_replay(frames, win)).show_all()
+        player = ReplayWindow(self, frames, lambda win: self.save_replay(frames, win))
+        player.set_destroy_with_parent(True)
+        player.show_all()
 
     def on_save_replay(self):
         self.canvas.commit_all()
@@ -1052,13 +1263,30 @@ class MainWindow(Win98Window):
         BitmapViewer(self, imageops.copy_surface(self.doc.surface)).show_all()
 
     # -- image -----------------------------------------------------------------------
+    def guard(self, fn, *args):
+        """Run a picture operation; report pictures that would be too big
+        instead of crashing. Returns True on success."""
+        try:
+            fn(*args)
+            return True
+        except imageops.TooBig as e:
+            self.error(str(e))
+        except (cairo.Error, MemoryError) as e:
+            self.error("Paint98 does not have enough memory for this picture.\n\n%s" % e)
+        return False
+
     def apply_transform(self, fn):
+        return self.guard(self._apply_transform, fn)
+
+    def _apply_transform(self, fn):
         sel = self.canvas.selection
         if sel is not None:
-            self.canvas.lift_selection()
+            # Compute first, so a failure leaves the selection untouched.
             sel.bake()
-            sel.set_content(fn(imageops.copy_surface(sel.content)))
-            self.canvas.queue_draw()
+            result = fn(imageops.copy_surface(sel.content))
+            self.canvas.lift_selection()
+            sel.set_content(result)
+            self.canvas.picture_changed()
         else:
             self.canvas.commit_all()
             self.doc.replace_surface(fn(imageops.copy_surface(self.doc.surface)))
@@ -1083,7 +1311,9 @@ class MainWindow(Win98Window):
                 if (sh, sv) != (100, 100):
                     s = imageops.scale(s, s.get_width() * sh / 100, s.get_height() * sv / 100)
                 if kh or kv:
-                    s = imageops.skew(s, kh, kv, bg if bg else self.state.bg)
+                    # Selections get transparent corners; the picture gets
+                    # the background colour.
+                    s = imageops.skew(s, kh, kv, bg)
                 return s
 
             self.apply_transform(fn)
@@ -1117,7 +1347,11 @@ class MainWindow(Win98Window):
         surf = self.selection_sticker_surface()
         if surf is None:
             return
-        sid = stickers.save_user_sticker(surf)
+        try:
+            sid = stickers.save_user_sticker(surf)
+        except (OSError, cairo.Error) as e:
+            self.error("Paint98 cannot save the sticker.\n\n%s" % e)
+            return
         if sid is None:
             return
         self.state.choose_sticker(sid)
@@ -1151,22 +1385,26 @@ class MainWindow(Win98Window):
             info = (time.strftime("%d/%m/%Y %H:%M", time.localtime(st.st_mtime)),
                     "{:,} bytes".format(st.st_size))
         dlg = dialogs.AttributesDialog(self, self.doc.width, self.doc.height, info,
-                                       colors=not self.settings.get("monochrome", False))
-        if dlg.run() == dialogs.OK:
+                                       colors=not self.doc.monochrome)
+        try:
+            if dlg.run() != dialogs.OK:
+                return
             w, h, colors = dlg.result()
-            self.doc.resize(w, h, self.state.bg)
-            if not colors and not self.settings.get("monochrome", False):
-                res = message_box(self, "Paint98", "Converting to black-and-white will lose color "
-                                  "information. Do you want to continue?", ("Yes", "No"))
-                if res == 0:
-                    def fn(s):
-                        imageops.to_black_and_white(s)
-                        return s
-                    self.apply_transform(fn)
-                    self.settings["monochrome"] = True
-            elif colors:
-                self.settings["monochrome"] = False
-        dlg.destroy()
+        finally:
+            dlg.destroy()
+        if not self.guard(self.doc.resize, w, h, self.state.bg):
+            return
+        if not colors and not self.doc.monochrome:
+            res = message_box(self, "Paint98", "Converting to black-and-white will lose color "
+                              "information. Do you want to continue?", ("Yes", "No"))
+            if res == 0:
+                def fn(s):
+                    imageops.to_black_and_white(s)
+                    return s
+                if self.apply_transform(fn):
+                    self.doc.monochrome = True
+        elif colors:
+            self.doc.monochrome = False
 
     def on_clear_image(self):
         sel = self.canvas.selection

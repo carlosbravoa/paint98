@@ -1,5 +1,6 @@
 """The Sticker Book: a classic tool window to browse and pick stickers."""
 
+import cairo
 import gi
 
 gi.require_version("Gtk", "3.0")
@@ -92,6 +93,7 @@ class StickerBook(Win98Window):
     def __init__(self, parent, state, get_selection_surface):
         super().__init__("Sticker Book", buttons=("close",), icon=False)
         self.set_transient_for(parent)
+        self.set_destroy_with_parent(True)
         self.set_type_hint(Gdk.WindowTypeHint.UTILITY)
         self.set_skip_taskbar_hint(True)
         self.state = state
@@ -194,7 +196,11 @@ class StickerBook(Win98Window):
         surf = self.get_selection_surface()
         if surf is None:
             return
-        sid = stickers.save_user_sticker(surf)
+        try:
+            sid = stickers.save_user_sticker(surf)
+        except (OSError, cairo.Error) as e:
+            message_box(self, "Sticker Book", "Paint98 cannot save the sticker.\n\n%s" % e, ("OK",))
+            return
         if sid is None:
             message_box(self, "Sticker Book", "The selection is empty.", ("OK",), icon="info")
             return

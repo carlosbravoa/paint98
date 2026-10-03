@@ -191,6 +191,26 @@ class Canvas(Gtk.DrawingArea):
         self.tool.commit()
         self.commit_selection()
 
+    def has_pending_work(self):
+        """Unsaved work that isn't in the picture yet (a moved or pasted
+        selection, text being typed, a curve or polygon in progress)."""
+        sel = self._selection
+        return (sel is not None and sel.floating) or self.tool.is_busy()
+
+    def discard_pending(self):
+        """Drop pending work without putting it in the picture."""
+        if self.drag_button:
+            self.tool.cancel()
+            self.drag_button = 0
+        if self.tool.is_busy():
+            self.tool.cancel()
+            if getattr(self.tool, "box", None) is not None:
+                self.tool.box = None
+                self.tool.text = ""
+                self.text_box_changed()
+        self.set_preview(None)
+        self.selection = None
+
     def text_box_changed(self):
         self.emit("text-box-changed")
 
@@ -210,16 +230,20 @@ class Canvas(Gtk.DrawingArea):
             return True
         if ev.type != Gdk.EventType.BUTTON_PRESS:
             return True
+        if self.resizing:
+            return True  # ignore other buttons while resizing the picture
         if self.drag_button:
             # A second button while drawing cancels the operation.
             self.tool.cancel()
             self.drag_button = 0
             return True
-        if ev.button == 1 and not self.tool.is_busy():
+        if ev.button == 1 and not self.tool.is_busy() and not self._on_selection_handle(ev.x, ev.y):
             h = self.resize_handle_at(ev.x, ev.y)
             if h:
                 self.commit_all()
-                self.resizing = [h, self.doc.width, self.doc.height]
+                # [handle, new w, new h, grab x, grab y, start w, start h]
+                self.resizing = [h, self.doc.width, self.doc.height, ev.x, ev.y,
+                                 self.doc.width, self.doc.height]
                 return True
         if ev.button not in (1, 3):
             return True
@@ -233,17 +257,25 @@ class Canvas(Gtk.DrawingArea):
         inside = 0 <= x < self.doc.width and 0 <= y < self.doc.height
         self.emit("pointer-info", x, y, inside)
         if self.resizing:
-            h = self.resizing[0]
-            nw = max(1, x) if h in ("e", "se") else self.doc.width
-            nh = max(1, y) if h in ("s", "se") else self.doc.height
-            self.resizing[1:] = [nw, nh]
+            h, _, _, gx, gy, w0, h0 = self.resizing
+            z = self.zoom
+            # Grow or shrink by how far the handle moved, not to the pointer.
+            nw = w0 + round((ev.x - gx) / z) if h in ("e", "se") else w0
+            nh = h0 + round((ev.y - gy) / z) if h in ("s", "se") else h0
+            nw = max(1, min(imageops.MAX_SIDE, nw))
+            nh = max(1, min(imageops.MAX_SIDE, nh))
+            while nw * nh > imageops.MAX_PIXELS:
+                nw, nh = max(1, nw - 16), max(1, nh - 16)
+            self.resizing[1:3] = [nw, nh]
             self.emit_size(nw, nh)
             self.queue_draw()
             return True
         if self.drag_button:
             self.tool.drag(x, y, self._mods(ev))
             return True
-        h = self.resize_handle_at(ev.x, ev.y) if not self.tool.is_busy() else None
+        h = None
+        if not self.tool.is_busy() and not self._on_selection_handle(ev.x, ev.y):
+            h = self.resize_handle_at(ev.x, ev.y)
         if h:
             self.set_cursor_name({"e": "ew-resize", "s": "ns-resize", "se": "nwse-resize"}[h])
         else:
@@ -255,7 +287,7 @@ class Canvas(Gtk.DrawingArea):
         self.last_widget_pos = (ev.x, ev.y)
         x, y = self.to_image(ev.x, ev.y)
         if self.resizing:
-            _, nw, nh = self.resizing
+            nw, nh = self.resizing[1:3]
             self.resizing = None
             self.emit_size(None)
             self.doc.resize(nw, nh, self.state.bg)
@@ -294,8 +326,10 @@ class Canvas(Gtk.DrawingArea):
             self.tool.insert(text)
 
     def handle_key(self, ev):
-        """Called by the window before accelerators so typing reaches text."""
-        if not self.text_active():
+        """Called by the window before accelerators so typing reaches text.
+        Only while the canvas itself has the keyboard focus, so typing in a
+        number box or the font list goes to that widget."""
+        if not self.text_active() or not self.is_focus():
             return False
         if self.tool.key_press(ev):
             return True
@@ -345,12 +379,25 @@ class Canvas(Gtk.DrawingArea):
         }
 
     def resize_handle_at(self, wx, wy):
+        """Picture sizing handle under the pointer. The hit area is generous
+        but never overlaps the picture itself, so edge pixels stay paintable."""
+        z = self.zoom
+        right = ORIGIN + self.doc.width * z
+        bottom = ORIGIN + self.doc.height * z
         pts = self._handle_points(0, 0, self.doc.width, self.doc.height)
         for name in ("se", "e", "s"):
             hx, hy = pts[name]
-            if hx - 2 <= wx < hx + HANDLE + 2 and hy - 2 <= wy < hy + HANDLE + 2:
-                return name
+            if not (hx - 2 <= wx < hx + HANDLE + 2 and hy - 2 <= wy < hy + HANDLE + 2):
+                continue
+            if name in ("e", "se") and wx < right:
+                continue
+            if name in ("s", "se") and wy < bottom:
+                continue
+            return name
         return None
+
+    def _on_selection_handle(self, wx, wy):
+        return self._selection is not None and self.selection_handle_at(wx, wy) is not None
 
     def selection_handle_at(self, wx, wy):
         sel = self._selection
@@ -483,8 +530,11 @@ class Canvas(Gtk.DrawingArea):
     # -- history ---------------------------------------------------------------------
     def undo(self):
         if self.drag_button:
+            # Undo during a drag just cancels the drag in progress.
             self.tool.cancel()
             self.drag_button = 0
+            self.set_preview(None)
+            return
         if self.tool.is_busy():
             self.tool.cancel()
             if hasattr(self.tool, "box") and self.tool.box is not None:
@@ -492,6 +542,10 @@ class Canvas(Gtk.DrawingArea):
                 self.text_box_changed()
             self.set_preview(None)
             return
+        sel = self._selection
+        if sel is not None and sel.floating:
+            # Put the moved/pasted pixels down first, so Redo brings them back.
+            self.stamp_selection()
         self.selection = None
         self.doc.undo()
 

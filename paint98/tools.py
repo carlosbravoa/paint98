@@ -220,6 +220,15 @@ class StrokeTool(Tool):
     up past it. Colour-cycling paints change colour along the stroke.
     """
 
+    def release(self, x, y, button, mods):
+        self.layer = None
+
+    def cancel(self):
+        """Second mouse button (or Undo) during a stroke: take it back."""
+        if getattr(self, "layer", None) is not None:
+            self.layer = None
+            self.doc.discard_last_change()
+
     def begin_stroke(self, paint):
         self.doc.push_undo()
         self.base = self.doc.undo_stack[-1]
@@ -403,9 +412,11 @@ class AirbrushTool(StrokeTool):
 
     def release(self, x, y, button, mods):
         self.stop()
+        super().release(x, y, button, mods)
 
     def cancel(self):
         self.stop()
+        super().cancel()
 
     def stop(self):
         if self.timer:
@@ -597,6 +608,7 @@ class MagnifierTool(Tool):
         self.c.queue_draw()
 
     def press(self, x, y, button, mods):
+        self.pos = (x, y)
         if button == 1 and self.c.zoom == 1:
             level = self.target_level()
             if level != 1:
@@ -919,8 +931,10 @@ class PolygonTool(PreviewTool):
             self.close()
 
     def double_click(self, x, y, button):
-        if len(self.points) >= 2:
+        if len(set(self.points)) >= 2:
             self.close()
+        else:
+            self.cancel()
 
     def close(self):
         self.closed = True
@@ -979,6 +993,11 @@ class SelectTool(Tool):
         self.c.commit_selection()
 
     def cancel(self):
+        sel = self.c.selection
+        if self.mode in ("move", "resize") and sel is not None:
+            sel.x, sel.y, sel.w, sel.h = self.before
+            self.c.emit_size(None)
+            self.c.picture_changed()
         self.mode = None
         self.rect = None
         self.c.queue_draw()
@@ -1004,13 +1023,15 @@ class SelectTool(Tool):
                 self.mode = "resize"
                 self.handle = h
                 self.c.lift_selection()
-                self.orig = (sel.x, sel.y, sel.w, sel.h)
+                self.orig = self.before = (sel.x, sel.y, sel.w, sel.h)
+                self.grab = (x, y)
                 return
             if sel.hit(x, y):
                 if button == 3:
                     self.c.show_context_menu()
                     return
                 self.mode = "move"
+                self.before = (sel.x, sel.y, sel.w, sel.h)
                 self.offset = (x - sel.x, y - sel.y)
                 if mods & CTRL:
                     if sel.floating:
@@ -1037,14 +1058,17 @@ class SelectTool(Tool):
         elif self.mode == "resize" and sel is not None:
             ox, oy, ow, oh = self.orig
             x0, y0, x1, y1 = ox, oy, ox + ow, oy + oh
+            # Move the grabbed edge by how far the pointer moved, so grabbing
+            # a handle never makes the selection jump.
+            dx, dy = x - self.grab[0], y - self.grab[1]
             if "w" in self.handle:
-                x0 = min(x, x1 - 1)
+                x0 = min(ox + dx, x1 - 1)
             if "e" in self.handle:
-                x1 = max(x + 1, x0 + 1)
+                x1 = max(ox + ow + dx, x0 + 1)
             if "n" in self.handle:
-                y0 = min(y, y1 - 1)
+                y0 = min(oy + dy, y1 - 1)
             if "s" in self.handle:
-                y1 = max(y + 1, y0 + 1)
+                y1 = max(oy + oh + dy, y0 + 1)
             sel.x, sel.y, sel.w, sel.h = x0, y0, x1 - x0, y1 - y0
             self.c.emit_size(sel.w, sel.h)
             self.c.picture_changed()
@@ -1066,15 +1090,17 @@ class RectSelectTool(SelectTool):
         self.drag_new(x, y)
 
     def drag_new(self, x, y):
-        x0, y0 = self.start
-        x = max(0, min(x, self.doc.width - 1))
-        y = max(0, min(y, self.doc.height - 1))
-        x0 = max(0, min(x0, self.doc.width - 1))
-        y0 = max(0, min(y0, self.doc.height - 1))
-        rx0, rx1 = sorted((x0, x))
-        ry0, ry1 = sorted((y0, y))
-        self.rect = (rx0, ry0, rx1 - rx0 + 1, ry1 - ry0 + 1)
-        self.c.emit_size(self.rect[2], self.rect[3])
+        # The dragged box, cut down to the part that overlaps the picture.
+        rx0, rx1 = sorted((self.start[0], x))
+        ry0, ry1 = sorted((self.start[1], y))
+        rx0, ry0 = max(0, rx0), max(0, ry0)
+        rx1, ry1 = min(self.doc.width - 1, rx1), min(self.doc.height - 1, ry1)
+        if rx0 > rx1 or ry0 > ry1:
+            self.rect = None
+            self.c.emit_size(0, 0)
+        else:
+            self.rect = (rx0, ry0, rx1 - rx0 + 1, ry1 - ry0 + 1)
+            self.c.emit_size(self.rect[2], self.rect[3])
         self.c.queue_draw()
 
     def finish_new(self, x, y):
@@ -1218,12 +1244,12 @@ class TextTool(Tool):
         self.c.emit_size(None)
         x0, x1 = sorted((x0, x1))
         y0, y1 = sorted((y0, y1))
+        if x1 < 0 or y1 < 0 or x0 >= self.doc.width or y0 >= self.doc.height:
+            return  # dragged entirely outside the picture
         x0 = max(0, x0)
         y0 = max(0, y0)
         w = max(self.MIN_W, x1 - x0 + 1)
         h = max(self.MIN_H, y1 - y0 + 1)
-        if x0 >= self.doc.width or y0 >= self.doc.height:
-            return
         w = min(w, self.doc.width - x0)
         h = min(h, self.doc.height - y0)
         self.box = [x0, y0, w, h]
@@ -1377,7 +1403,9 @@ class StickerTool(Tool):
         self.layer = None
 
     def cancel(self):
-        self.layer = None
+        if self.layer is not None:
+            self.layer = None
+            self.doc.discard_last_change()
 
     def stamp(self, x, y):
         img = self.image()
@@ -1391,12 +1419,19 @@ class StickerTool(Tool):
         cr.set_source_surface(self.base, 0, 0)
         cr.paint()
         cr.set_operator(cairo.OPERATOR_OVER)
-        alpha = self.state.tool_opacity("sticker")
-        for m in self.symmetry_transforms():
-            cr.set_matrix(m)
-            cr.set_source_surface(self.layer, 0, 0)
-            cr.get_source().set_filter(cairo.FILTER_NEAREST)
-            cr.paint_with_alpha(alpha)
+        layer = self.layer
+        mats = self.symmetry_transforms()
+        if len(mats) > 1:
+            # Flatten the copies first so overlaps don't build up opacity.
+            layer = imageops.new_surface(self.doc.width, self.doc.height)
+            lcr = cairo.Context(layer)
+            for m in mats:
+                lcr.set_matrix(m)
+                lcr.set_source_surface(self.layer, 0, 0)
+                lcr.get_source().set_filter(cairo.FILTER_NEAREST)
+                lcr.paint()
+        cr.set_source_surface(layer, 0, 0)
+        cr.paint_with_alpha(self.state.tool_opacity("sticker"))
         self.doc.changed()
 
     def hover(self, x, y):

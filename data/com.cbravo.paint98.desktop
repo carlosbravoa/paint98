@@ -9,3 +9,4 @@ Terminal=false
 Categories=Graphics;2DGraphics;RasterGraphics;GTK;
 MimeType=image/png;image/bmp;image/jpeg;image/tiff;image/gif;
 Keywords=draw;paint;mspaint;bitmap;pixel;
+StartupWMClass=paint98
