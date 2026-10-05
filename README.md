@@ -1,5 +1,7 @@
 # Paint98
 
+[![Get it from the Snap Store](https://snapcraft.io/en/dark/install.svg)](https://snapcraft.io/paint98)
+
 A native GNOME paint program that looks and behaves like the classic
 Windows 98 Paint: grey 3D chrome, navy title bar, the 16-tool tool box with
 its options box, the 28-colour palette, the same menus, shortcuts, status bar
