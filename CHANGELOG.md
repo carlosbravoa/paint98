@@ -5,7 +5,7 @@ next snap release.
 
 ## Unreleased
 
-## 1.0.2 (beta)
+## 1.0.2 (stable)
 
 - Fill and Magic Wand start with 2% tolerance, so filling an area of a
   painted picture covers its slightly uneven colours instead of looking

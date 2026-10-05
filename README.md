@@ -38,7 +38,7 @@ Ctrl+L and Ctrl+A toggles the colour box.
 ## Install
 
 ```sh
-sudo snap install paint98 --beta
+sudo snap install paint98
 ```
 
 ## Running from source
