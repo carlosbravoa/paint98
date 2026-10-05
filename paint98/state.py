@@ -123,7 +123,9 @@ class PaintState(GObject.Object):
         self.sticker_size = 48
         self.sticker_recent = ["px:Star", "px:Heart", "px:Sun", "px:Cat"]
         self.fill_mode = 0  # 0 solid, 1 linear gradient, 2 radial gradient
-        self.tolerance = 0  # percent (fill and magic wand)
+        # Percent, shared by Fill and Magic Wand. A little tolerance by default
+        # so fills also cover the slightly uneven colours of painted pictures.
+        self.tolerance = 2
         self.wand_global = False  # magic wand: all similar colours, not just touching ones
         self.opacity = {t: 100 for t in self.PAINT_TOOLS}  # percent, per tool
         self.airbrush_size = 0

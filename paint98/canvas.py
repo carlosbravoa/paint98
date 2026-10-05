@@ -399,14 +399,24 @@ class Canvas(Gtk.DrawingArea):
     def _on_selection_handle(self, wx, wy):
         return self._selection is not None and self.selection_handle_at(wx, wy) is not None
 
+    def box_handle_at(self, x, y, w, h, wx, wy):
+        """Which of the 8 handles around an image-space box is at (wx, wy)."""
+        for name, (hx, hy) in self._handle_points(x, y, w, h).items():
+            if hx - 1 <= wx < hx + HANDLE + 1 and hy - 1 <= wy < hy + HANDLE + 1:
+                return name
+        return None
+
+    def draw_box_handles(self, cr, x, y, w, h):
+        cr.set_source_rgb(*HANDLE_COLOR)
+        for hx, hy in self._handle_points(x, y, w, h).values():
+            cr.rectangle(hx, hy, HANDLE, HANDLE)
+        cr.fill()
+
     def selection_handle_at(self, wx, wy):
         sel = self._selection
         if sel is None:
             return None
-        for name, (hx, hy) in self._handle_points(sel.x, sel.y, sel.w, sel.h).items():
-            if hx - 1 <= wx < hx + HANDLE + 1 and hy - 1 <= wy < hy + HANDLE + 1:
-                return name
-        return None
+        return self.box_handle_at(sel.x, sel.y, sel.w, sel.h, wx, wy)
 
     # -- selection -----------------------------------------------------------------
     @property
@@ -612,7 +622,7 @@ class Canvas(Gtk.DrawingArea):
         self.tool.draw_overlay(cr)
 
         if self.resizing:
-            _, nw, nh = self.resizing
+            nw, nh = self.resizing[1:3]
             win98.dotted_rect(cr, ORIGIN, ORIGIN, nw * z, nh * z, (0, 0, 0))
         return True
 

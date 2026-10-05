@@ -84,7 +84,9 @@ def clean_settings(cfg):
             pass
     if isinstance(cfg.get("opacity"), dict):
         out["opacity"] = {k: v for k, v in cfg["opacity"].items() if isinstance(k, str) and is_int(v)}
-    for k in ("tolerance", "fill_mode"):
+    # "fill_tolerance" replaces the old "tolerance" key, so the old default
+    # of 0 saved by earlier versions doesn't hide the new 2% default.
+    for k in ("fill_tolerance", "fill_mode"):
         if is_int(cfg.get(k)):
             out[k] = cfg[k]
     for k in ("sizes", "sticker"):
@@ -423,7 +425,7 @@ class MainWindow(Win98Window):
         for tool, value in (cfg.get("opacity") or {}).items():
             if tool in st.opacity and isinstance(value, int):
                 st.opacity[tool] = max(1, min(100, value))
-        st.tolerance = max(0, min(100, int(cfg.get("tolerance", 0))))
+        st.tolerance = max(0, min(100, int(cfg.get("fill_tolerance", st.tolerance))))
         st.fill_mode = int(cfg.get("fill_mode", 0)) % 3
         st.eraser_shape = "circle" if cfg.get("eraser_shape") == "circle" else "square"
         sizes = cfg.get("sizes") or {}
@@ -447,7 +449,8 @@ class MainWindow(Win98Window):
         self.settings["last_plain"] = st.last_plain
         self.settings.pop("use_custom", None)
         self.settings["opacity"] = dict(st.opacity)
-        self.settings["tolerance"] = st.tolerance
+        self.settings["fill_tolerance"] = st.tolerance
+        self.settings.pop("tolerance", None)
         self.settings["fill_mode"] = st.fill_mode
         self.settings["eraser_shape"] = st.eraser_shape
         self.settings["sizes"] = {"pencil": st.pencil_size, "brush": st.brush_size,

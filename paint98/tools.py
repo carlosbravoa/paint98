@@ -1160,6 +1160,38 @@ class TextTool(Tool):
         self.text = ""
         self.dragging = None
         self._surface = None
+        # While the box is open: None, ("resize", handle, orig, grab) or
+        # ("move", orig, grab).
+        self.adjusting = None
+
+    RESIZE_CURSORS = {"n": "ns-resize", "s": "ns-resize", "e": "ew-resize", "w": "ew-resize",
+                      "ne": "nesw-resize", "sw": "nesw-resize", "nw": "nwse-resize", "se": "nwse-resize"}
+
+    def box_part_at(self, x, y):
+        """What the pointer is over: a handle name, "frame", "inside" or None."""
+        if self.box is None:
+            return None
+        bx, by, bw, bh = self.box
+        wx, wy = self.c.last_widget_pos
+        h = self.c.box_handle_at(bx, by, bw, bh, wx, wy)
+        if h:
+            return h
+        if bx <= x < bx + bw and by <= y < by + bh:
+            return "inside"
+        # The dotted frame just outside the box (a few screen pixels wide).
+        z = self.c.zoom
+        x0, y0 = self.c.to_widget(bx, by)
+        x1, y1 = x0 + bw * z, y0 + bh * z
+        if x0 - 5 <= wx < x1 + 5 and y0 - 5 <= wy < y1 + 5:
+            return "frame"
+        return None
+
+    def hover(self, x, y):
+        part = self.box_part_at(x, y)
+        if part in self.RESIZE_CURSORS:
+            self.c.set_cursor_name(self.RESIZE_CURSORS[part])
+        elif part == "frame":
+            self.c.set_cursor_name("move")
 
     def is_busy(self):
         return self.box is not None
@@ -1219,8 +1251,16 @@ class TextTool(Tool):
 
     def press(self, x, y, button, mods):
         if self.box is not None:
-            bx, by, bw, bh = self.box
-            if bx <= x < bx + bw and by <= y < by + bh:
+            part = self.box_part_at(x, y)
+            if part == "inside":
+                return
+            if part and button == 1:
+                # Resize with a handle, or move by dragging the frame.
+                orig = tuple(self.box)
+                if part == "frame":
+                    self.adjusting = ("move", orig, (x, y))
+                else:
+                    self.adjusting = ("resize", part, orig, (x, y))
                 return
             self.commit()
             return
@@ -1230,13 +1270,45 @@ class TextTool(Tool):
         self.c.queue_draw()
 
     def drag(self, x, y, mods):
+        if self.adjusting:
+            self.adjust(x, y)
+            return
         if self.dragging:
             self.dragging[2:] = [x, y]
             d = self.dragging
             self.c.emit_size(abs(d[2] - d[0]) + 1, abs(d[3] - d[1]) + 1)
             self.c.queue_draw()
 
+    def adjust(self, x, y):
+        W, H = self.doc.width, self.doc.height
+        if self.adjusting[0] == "move":
+            _, (ox, oy, ow, oh), (gx, gy) = self.adjusting
+            nx = max(0, min(W - ow, ox + x - gx))
+            ny = max(0, min(H - oh, oy + y - gy))
+            self.box = [nx, ny, ow, oh]
+        else:
+            _, handle, (ox, oy, ow, oh), (gx, gy) = self.adjusting
+            dx, dy = x - gx, y - gy
+            x0, y0, x1, y1 = ox, oy, ox + ow, oy + oh
+            if "w" in handle:
+                x0 = max(0, min(ox + dx, x1 - self.MIN_W))
+            if "e" in handle:
+                x1 = min(W, max(ox + ow + dx, x0 + self.MIN_W))
+            if "n" in handle:
+                y0 = max(0, min(oy + dy, y1 - self.MIN_H))
+            if "s" in handle:
+                y1 = min(H, max(oy + oh + dy, y0 + self.MIN_H))
+            self.box = [x0, y0, x1 - x0, y1 - y0]
+            self.c.emit_size(x1 - x0, y1 - y0)
+        self.refresh()  # re-wrap the text to the new width
+
     def release(self, x, y, button, mods):
+        if self.adjusting:
+            self.adjust(x, y)
+            self.adjusting = None
+            self.c.emit_size(None)
+            self.c.grab_focus()  # keep typing straight away
+            return
         if not self.dragging:
             return
         x0, y0, x1, y1 = self.dragging
@@ -1271,11 +1343,18 @@ class TextTool(Tool):
         self.box = None
         self.text = ""
         self._surface = None
+        self.adjusting = None
         self.c.text_box_changed()
         self.c.queue_draw()
 
     def cancel(self):
         self.dragging = None
+        if self.adjusting:
+            # Second button while resizing/moving: put the box back.
+            self.box = list(self.adjusting[2] if self.adjusting[0] == "resize" else self.adjusting[1])
+            self.adjusting = None
+            self.c.emit_size(None)
+            self.refresh()
         self.c.queue_draw()
 
     def insert(self, s):
@@ -1317,6 +1396,7 @@ class TextTool(Tool):
             x, y, w, h = self.box
             wx, wy = self.c.to_widget(x, y)
             win98.dotted_rect(cr, int(wx) - 1, int(wy) - 1, w * z + 2, h * z + 2, (0, 0, 0.5))
+            self.c.draw_box_handles(cr, x, y, w, h)
             if self.c.has_focus() and getattr(self, "_layout", None) is not None:
                 idx = len(self.text.encode("utf-8"))
                 strong, _ = self._layout.get_cursor_pos(idx)

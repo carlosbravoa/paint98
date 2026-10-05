@@ -1,6 +1,6 @@
 name: paint98
 base: core24
-version: '1.0.1'
+version: '1.0.2'
 title: Paint98
 summary: The classic paint program, pixel for pixel, on the GNOME desktop
 description: |
