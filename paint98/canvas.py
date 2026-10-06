@@ -13,6 +13,8 @@ from .selection import Selection  # noqa: E402
 from .tools import TOOL_CLASSES  # noqa: E402
 
 ORIGIN = 3   # gap between the workspace edge and the picture
+ZOOM_MAX = 8
+ZOOM_STEP = 1.2   # zoom factor per mouse wheel notch
 HANDLE = 3   # size of the sizing handles
 WORKSPACE = (0x80 / 255,) * 3
 HANDLE_COLOR = (0, 0, 0x80 / 255)
@@ -62,6 +64,9 @@ class Canvas(Gtk.DrawingArea):
         self.drag_button = 0
         self.resizing = None
         self.last_widget_pos = (0, 0)
+        self._pending_scroll = None
+        self._scroll_timer = 0
+        self._wheel_zoom = None   # (exact, shown) zoom while Ctrl+wheeling
         self.hadj = None
         self.vadj = None
         self._cursors = {}
@@ -72,12 +77,15 @@ class Canvas(Gtk.DrawingArea):
         self.set_can_focus(True)
         self.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK
                         | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK
-                        | Gdk.EventMask.KEY_PRESS_MASK | Gdk.EventMask.FOCUS_CHANGE_MASK)
+                        | Gdk.EventMask.KEY_PRESS_MASK | Gdk.EventMask.FOCUS_CHANGE_MASK
+                        | Gdk.EventMask.SCROLL_MASK | Gdk.EventMask.SMOOTH_SCROLL_MASK)
         self.connect("draw", self.on_draw)
         self.connect("button-press-event", self.on_press)
         self.connect("button-release-event", self.on_release)
         self.connect("motion-notify-event", self.on_motion)
         self.connect("leave-notify-event", self.on_leave)
+        self.connect("scroll-event", self.on_scroll)
+        self.connect("size-allocate", self.on_size_allocate)
         self.connect("realize", self.on_realize)
         self.connect("unrealize", self.on_unrealize)
         self.connect("focus-in-event", self.on_focus_in)
@@ -96,8 +104,8 @@ class Canvas(Gtk.DrawingArea):
     # -- geometry ---------------------------------------------------------------
     def update_size(self):
         z = self.zoom
-        self.set_size_request(ORIGIN + self.doc.width * z + HANDLE + 8,
-                              ORIGIN + self.doc.height * z + HANDLE + 8)
+        self.set_size_request(ORIGIN + math.ceil(self.doc.width * z) + HANDLE + 8,
+                              ORIGIN + math.ceil(self.doc.height * z) + HANDLE + 8)
         self.queue_draw()
 
     def to_widget(self, x, y):
@@ -117,27 +125,49 @@ class Canvas(Gtk.DrawingArea):
         """Zoom; point (image coords) becomes the top-left (or centre) of the view."""
         if point is None:
             vw, vh = self.visible_size()
-            point = self.to_image(self.hadj.get_value() + vw / 2 if self.hadj else 0,
-                                  self.vadj.get_value() + vh / 2 if self.vadj else 0)
+            sx, sy = self.scroll_position()
+            point = self.to_image(sx + vw / 2, sy + vh / 2)
             center = True
         self.zoom = z
         self.update_size()
         self.emit("zoom-changed")
+        if self.hadj is None:
+            return
+        vw, vh = self.visible_size()
+        px, py = point[0] * z + ORIGIN, point[1] * z + ORIGIN
+        if center:
+            px -= vw / 2
+            py -= vh / 2
+        # Applied once the new size is allocated (see on_size_allocate).
+        self._pending_scroll = (max(0, px), max(0, py))
+        if not self._scroll_timer:
+            self._scroll_timer = GLib.timeout_add(30, self._apply_scroll)
 
-        def scroll():
-            if self.hadj is None:
-                return False
+    def scroll_position(self):
+        """Where the view is scrolled to, counting a scroll still pending."""
+        if self._pending_scroll is not None:
+            return self._pending_scroll
+        if self.hadj is None:
+            return 0, 0
+        return self.hadj.get_value(), self.vadj.get_value()
+
+    def _apply_scroll(self):
+        self._scroll_timer = 0
+        if self._pending_scroll is not None and self.hadj is not None:
+            px, py = self._pending_scroll
+            self._pending_scroll = None
             vw, vh = self.visible_size()
-            px, py = point[0] * z + ORIGIN, point[1] * z + ORIGIN
-            if center:
-                px -= vw / 2
-                py -= vh / 2
             self.hadj.set_value(max(0, min(px, self.hadj.get_upper() - vw)))
             self.vadj.set_value(max(0, min(py, self.vadj.get_upper() - vh)))
-            return False
+        return False
 
-        # Wait for the new size to be allocated before scrolling.
-        GLib.timeout_add(30, scroll)
+    def on_size_allocate(self, w, alloc):
+        # The viewport has updated its adjustments by now, so scroll in the
+        # same frame as the resize instead of flashing the old position.
+        if self._pending_scroll is not None:
+            if self._scroll_timer:
+                GLib.source_remove(self._scroll_timer)
+            self._apply_scroll()
 
     # -- cursors --------------------------------------------------------------------
     def _cursor(self, name):
@@ -303,6 +333,37 @@ class Canvas(Gtk.DrawingArea):
         if not self.drag_button:
             self.tool.leave()
         return False
+
+    def on_scroll(self, w, ev):
+        """Ctrl+wheel zooms smoothly between 100% and 800%, keeping the
+        picture point under the mouse in place; plain wheel scrolls."""
+        if not ev.state & Gdk.ModifierType.CONTROL_MASK:
+            return False
+        if ev.direction == Gdk.ScrollDirection.UP:
+            notches = 1
+        elif ev.direction == Gdk.ScrollDirection.DOWN:
+            notches = -1
+        elif ev.direction == Gdk.ScrollDirection.SMOOTH:
+            notches = -ev.get_scroll_deltas()[2]
+        else:
+            return True
+        # Track the exact level apart from the shown one, so that small
+        # touchpad steps add up instead of being lost to the snapping below.
+        if self._wheel_zoom is None or self._wheel_zoom[1] != self.zoom:
+            self._wheel_zoom = (self.zoom, self.zoom)
+        exact = min(ZOOM_MAX, max(1, self._wheel_zoom[0] * ZOOM_STEP ** notches))
+        # Settle on whole levels (crisp, even pixels) when passing close by.
+        z = round(exact) if abs(exact - round(exact)) < 0.04 * exact else exact
+        self._wheel_zoom = (exact, z)
+        if z != self.zoom:
+            # Pointer offset on screen, and the picture point under it.
+            ox = ev.x - (self.hadj.get_value() if self.hadj else 0)
+            oy = ev.y - (self.vadj.get_value() if self.vadj else 0)
+            sx, sy = self.scroll_position()
+            ix = (sx + ox - ORIGIN) / self.zoom
+            iy = (sy + oy - ORIGIN) / self.zoom
+            self.set_zoom(z, (ix - ox / z, iy - oy / z))
+        return True
 
     def on_realize(self, w):
         self.im.set_client_window(self.get_window())
@@ -634,7 +695,7 @@ class Canvas(Gtk.DrawingArea):
         y1 = min(ih, int((clip[3] - ORIGIN) // z) + 1)
         cr.set_source_rgb(0.5, 0.5, 0.5)
         for x in range(x0, x1 + 1):
-            cr.rectangle(ORIGIN + x * z, ORIGIN + y0 * z, 1, (y1 - y0) * z)
+            cr.rectangle(ORIGIN + round(x * z), ORIGIN + y0 * z, 1, (y1 - y0) * z)
         for y in range(y0, y1 + 1):
-            cr.rectangle(ORIGIN + x0 * z, ORIGIN + y * z, (x1 - x0) * z, 1)
+            cr.rectangle(ORIGIN + x0 * z, ORIGIN + round(y * z), (x1 - x0) * z, 1)
         cr.fill()

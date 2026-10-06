@@ -103,6 +103,7 @@ def dither_fill(cr, x, y, w, h):
 
 def dotted_rect(cr, x, y, w, h, color=DARK):
     """1px dotted focus rectangle (every other pixel)."""
+    x, y, w, h = round(x), round(y), round(w), round(h)
     cr.set_source_rgb(*color)
     for i in range(0, w, 2):
         cr.rectangle(x + i, y, 1, 1)

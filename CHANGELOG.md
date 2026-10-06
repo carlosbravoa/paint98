@@ -5,6 +5,12 @@ next snap release.
 
 ## Unreleased
 
+## 1.0.3
+
+- Ctrl + mouse wheel zooms smoothly in and out (100% to 800%, about 20%
+  per notch, settling on whole sizes like 200% when close), keeping the
+  spot under the mouse pointer in place. Touchpads zoom continuously.
+
 ## 1.0.2 (stable)
 
 - Fill and Magic Wand start with 2% tolerance, so filling an area of a
