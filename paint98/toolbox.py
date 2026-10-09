@@ -7,6 +7,8 @@ import cairo
 import gi
 
 gi.require_version("Gtk", "3.0")
+gi.require_version("Pango", "1.0")
+gi.require_version("PangoCairo", "1.0")
 from gi.repository import Gdk, GObject, Gtk, Pango, PangoCairo  # noqa: E402
 
 from . import pixmaps, stickers, win98  # noqa: E402

@@ -52,6 +52,23 @@ sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0
 ./bin/paint98 [picture.png]
 ```
 
+## Tests
+
+The test suite uses only the standard library's `unittest`:
+
+```sh
+python3 -m unittest            # from the project root
+python3 -m unittest -v tests.test_tools.FillTests   # one group
+xvfb-run -a python3 -m unittest   # on a machine without a display
+```
+
+Most tests open a real (off-screen) Paint98 window and drive the tools with
+simulated mouse input, then check the pixels and that Undo/Redo restore the
+picture. Without a display those are skipped and only the file and image
+tests run. Tests use a throw-away settings folder, so they never touch your
+own settings, recovery copies or stickers. GitHub runs the whole suite under
+Xvfb on every push (`.github/workflows/tests.yml`).
+
 ## Building the snap
 
 ```sh

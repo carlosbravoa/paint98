@@ -156,32 +156,38 @@ def scale(surf, nw, nh):
     return out
 
 
+def _shear_offsets(t, n):
+    """Whole-pixel shift of each of n rows (or columns) for a shear by t,
+    made non-negative, plus how much wider (or taller) that makes the result."""
+    offs = [math.floor(t * (i + 0.5)) for i in range(n)]
+    lo = min(offs)
+    return [o - lo for o in offs], max(offs) - lo
+
+
 def skew(surf, deg_h, deg_v, bg=None):
     """Skew horizontally, then vertically (like the original program).
 
-    Doing the two shears one after the other keeps the transform invertible
-    for every angle pair. bg=None leaves the new corners transparent."""
+    Each row, then each column, moves by a whole number of pixels, so no
+    pixel is lost or doubled at any angle. bg=None leaves the new corners
+    transparent."""
     w, h = surf.get_width(), surf.get_height()
-    th = math.tan(math.radians(deg_h))
-    tv = math.tan(math.radians(deg_v))
-    m = cairo.Matrix(1, tv, th, 1 + tv * th, 0, 0)
-    xs, ys = [], []
-    for (x, y) in ((0, 0), (w, 0), (0, h), (w, h)):
-        X, Y = m.transform_point(x, y)
-        xs.append(X)
-        ys.append(Y)
-    minx, miny = min(xs), min(ys)
-    nw = int(math.ceil(max(xs) - minx))
-    nh = int(math.ceil(max(ys) - miny))
+    dxs, grow_w = _shear_offsets(math.tan(math.radians(deg_h)), h)
+    nw = w + grow_w
+    dys, grow_h = _shear_offsets(math.tan(math.radians(deg_v)), nw)
+    nh = h + grow_h
     check_size(nw, nh)
+    rows = new_surface(nw, h)
+    cr = cairo.Context(rows)
+    for y, dx in enumerate(dxs):
+        cr.set_source_surface(surf, dx, 0)
+        cr.rectangle(dx, y, w, 1)
+        cr.fill()
     out = new_surface(nw, nh, bg)
     cr = cairo.Context(out)
-    cr.set_antialias(cairo.ANTIALIAS_NONE)
-    cr.set_matrix(cairo.Matrix(1, tv, th, 1 + tv * th, -minx, -miny))
-    cr.set_source_surface(surf, 0, 0)
-    cr.get_source().set_filter(cairo.FILTER_NEAREST)
-    cr.rectangle(0, 0, w, h)
-    cr.fill()
+    for x, dy in enumerate(dys):
+        cr.set_source_surface(rows, 0, dy)
+        cr.rectangle(x, dy, 1, h)
+        cr.fill()
     return out
 
 
