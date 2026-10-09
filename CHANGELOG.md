@@ -5,6 +5,8 @@ next snap release.
 
 ## Unreleased
 
+## 1.0.4
+
 - Gradient fills: dragging now only traces the direction (a dashed line
   from a start marker to an end marker, plus the reach circle for radial
   gradients); the area is filled once, when the button is released. This
