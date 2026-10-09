@@ -5,6 +5,8 @@ next snap release.
 
 ## Unreleased
 
+## 1.0.5
+
 - Fixed: Stretch/Skew at exactly 45 degrees (and some other angles) lost
   a row or column of the picture and doubled another. Skewing now shifts
   whole pixel rows and columns, so nothing is lost at any angle.
