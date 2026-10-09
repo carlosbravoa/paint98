@@ -111,7 +111,7 @@ class ColorBox(Gtk.DrawingArea):
 
     def on_motion(self, w, ev):
         if self.indicator_at(ev.x, ev.y):
-            self.emit("hint", "Double-click to edit the foreground or background color (hex too).")
+            self.emit("hint", "Click to edit the foreground or background color (hex too).")
         elif self.on_fun(ev.x, ev.y):
             self.emit("hint", self.fun_text())
         elif self.on_swap(ev.x, ev.y):
@@ -140,8 +140,9 @@ class ColorBox(Gtk.DrawingArea):
                 self.queue_draw()
             return True
         which = self.indicator_at(ev.x, ev.y)
-        if which and ev.button == 1 and ev.type == Gdk.EventType._2BUTTON_PRESS:
-            self.emit("edit-indicator", which)
+        if which:
+            if ev.button == 1 and ev.type == Gdk.EventType.BUTTON_PRESS:
+                self.emit("edit-indicator", which)
             return True
         i = self.index_at(ev.x, ev.y)
         if i is None:

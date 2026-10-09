@@ -441,7 +441,8 @@ class AirbrushTool(StrokeTool):
 
 class FillTool(Tool):
     """Flood fill with tolerance; solid colour or a linear/radial gradient
-    dragged from the click point (foreground to background colour)."""
+    dragged from the click point (foreground to background colour). A gradient
+    drag only traces its direction; the area is filled once the button is released."""
     name = "fill"
     cursor = "fill"
 
@@ -449,59 +450,62 @@ class FillTool(Tool):
         super().__init__(canvas)
         self.region = None
         self.start = self.end = None
+        self.tracing = False
 
     def is_busy(self):
-        return self.region is not None
+        return self.tracing
 
     def press(self, x, y, button, mods):
         st = self.state
-        paint = self.color(button)
-        if (st.fill_mode == 0 and st.tolerance == 0 and st.tool_opacity("fill") >= 1 and not is_fun(paint)
-                and imageops.get_pixel(self.doc.surface, x, y) == tuple(paint)):
-            return
-        res = imageops.region_mask(self.doc.surface, x, y, st.tolerance)
-        if res is None:
-            return
-        self.region, self.bbox = res
         self.button = button
         self.start = self.end = (x, y)
-        if self.state.fill_mode == 0:
-            self.doc.push_undo()
-            self.paint(self.doc.surface)
-            self.doc.changed()
-            self.region = None
-        else:
-            self.show()
+        if st.fill_mode != 0:
+            self.tracing = 0 <= x < self.doc.width and 0 <= y < self.doc.height
+            return
+        paint = self.color(button)
+        if (st.tolerance == 0 and st.tool_opacity("fill") >= 1 and not is_fun(paint)
+                and imageops.get_pixel(self.doc.surface, x, y) == tuple(paint)):
+            return
+        if not self.find_region():
+            return
+        self.doc.push_undo()
+        self.paint(self.doc.surface)
+        self.doc.changed()
+        self.region = None
+
+    def find_region(self):
+        res = imageops.region_mask(self.doc.surface, self.start[0], self.start[1], self.state.tolerance)
+        if res is None:
+            return False
+        self.region, self.bbox = res
+        return True
 
     def drag(self, x, y, mods):
-        if self.region is None:
+        if not self.tracing:
             return
         if mods & SHIFT:
             x, y = constrain_45(self.start[0], self.start[1], x, y)
         self.end = (x, y)
-        self.show()
+        self.c.queue_draw()
 
     def release(self, x, y, button, mods):
-        if self.region is None:
+        if not self.tracing:
             return
         self.drag(x, y, mods)
+        self.tracing = False
+        if not self.find_region():
+            return
         self.doc.push_undo()
         self.paint(self.doc.surface)
-        self.c.set_preview(None)
         self.doc.changed()
         self.region = None
 
     def cancel(self):
+        self.tracing = False
         self.region = None
-        self.c.set_preview(None)
 
     def commit(self):
         self.cancel()
-
-    def show(self):
-        prev = imageops.copy_surface(self.doc.surface)
-        self.paint(prev)
-        self.c.set_preview(prev)
 
     def source(self):
         a = 1.0  # opacity is applied when painting
@@ -537,12 +541,27 @@ class FillTool(Tool):
         cr.paint_with_alpha(self.state.tool_opacity("fill"))
 
     def draw_overlay(self, cr):
-        if self.region is None or self.start == self.end:
+        if not self.tracing:
             return
         z = self.c.zoom
         sx, sy = self.c.to_widget(*self.start)
         ex, ey = self.c.to_widget(*self.end)
+        # Start in the colour the fill begins with, end in the one it fades to.
+        m = max(3, z)
+        self.marker(cr, sx + z / 2, sy + z / 2, m, solid(self.color(self.button)))
+        if self.start == self.end:
+            return
+        self.marker(cr, ex + z / 2, ey + z / 2, m, solid(self.other_color(self.button)))
         cr.set_line_width(1)
+        if self.state.fill_mode == 2:
+            # Radial: the circle the gradient reaches.
+            r = math.hypot(ex - sx, ey - sy)
+            for rgb, offset in (((1, 1, 1), 0), ((0, 0, 0), 3)):
+                cr.new_sub_path()
+                cr.arc(sx + z / 2, sy + z / 2, r, 0, 2 * math.pi)
+                cr.set_source_rgb(*rgb)
+                cr.set_dash([3, 3], offset)
+                cr.stroke()
         cr.move_to(sx + z / 2, sy + z / 2)
         cr.line_to(ex + z / 2, ey + z / 2)
         cr.set_source_rgb(1, 1, 1)
@@ -551,6 +570,16 @@ class FillTool(Tool):
         cr.set_source_rgb(0, 0, 0)
         cr.set_dash([3, 3], 3)
         cr.stroke()
+        cr.set_dash([])
+
+    @staticmethod
+    def marker(cr, x, y, m, rgb):
+        cr.rectangle(x - m - 1, y - m - 1, 2 * m + 2, 2 * m + 2)
+        cr.set_source_rgb(0, 0, 0)
+        cr.fill()
+        cr.rectangle(x - m, y - m, 2 * m, 2 * m)
+        cr.set_source_rgb(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255)
+        cr.fill()
 
 
 class PickTool(Tool):

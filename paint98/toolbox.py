@@ -1,4 +1,4 @@
-"""The tool box: 16 tool buttons plus the tool options box below them."""
+"""The tool box: 16 tool buttons, Undo and Redo, then the tool options box below them."""
 
 import random
 
@@ -19,7 +19,12 @@ BTN = 25
 X0, Y0 = 3, 2
 WIDTH = 56
 OPT_X = 6
-ROWS = (len(TOOLS) + 1) // 2
+# Undo and Redo buttons in the last row, after the tools.
+ACTIONS = ("undo", "redo")
+ITEMS = TOOLS + list(ACTIONS)
+ACTION_NAMES = {"undo": "Undo", "redo": "Redo"}
+ACTION_HELP = {"undo": "Takes back the last change.", "redo": "Puts back the change you undid."}
+ROWS = (len(ITEMS) + 1) // 2
 OPT_Y = Y0 + ROWS * BTN + 4
 OPT_W, OPT_H = 44, 100
 NAVY = (0, 0, 0x80 / 255)
@@ -38,17 +43,47 @@ def _airbrush_dots(size, seed):
 
 AIR_DOTS = [_airbrush_dots(s, i) for i, s in enumerate(AIRBRUSH_SIZES)]
 
+UNDO_ARROW = [
+    "................",
+    "................",
+    "................",
+    "....k...........",
+    "...kk...........",
+    "..kkkkkkkkk.....",
+    ".kkkkkkkkkkk....",
+    "..kkkkkkkkkkk...",
+    "...kk......kkk..",
+    "....k.......kk..",
+    "............kk..",
+    "............kk..",
+    "...........kk...",
+    "..........kk....",
+    "................",
+    "................",
+]
+ACTION_ICONS = {}
+
+
+def _action_icon(name):
+    if name not in ACTION_ICONS:
+        rows = UNDO_ARROW if name == "undo" else [r[::-1] for r in UNDO_ARROW]
+        ACTION_ICONS[name] = pixmaps.make_surface(rows)
+    return ACTION_ICONS[name]
+
 
 class ToolBox(Gtk.DrawingArea):
     __gsignals__ = {
         "hint": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
         "open-sticker-book": (GObject.SignalFlags.RUN_FIRST, None, ()),
+        "action": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
     }
 
     def __init__(self, state):
         super().__init__()
         self.state = state
         self.pressed = None
+        self.action_down = None
+        self.action_enabled = lambda name: True
         self.set_size_request(WIDTH, OPT_Y + OPT_H + 4)
         self.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK
                         | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK)
@@ -67,8 +102,8 @@ class ToolBox(Gtk.DrawingArea):
     def tool_at(self, x, y):
         col = int((x - X0) // BTN)
         row = int((y - Y0) // BTN)
-        if 0 <= col < 2 and 0 <= row < ROWS and x >= X0 and y >= Y0 and row * 2 + col < len(TOOLS):
-            return TOOLS[row * 2 + col]
+        if 0 <= col < 2 and 0 <= row < ROWS and x >= X0 and y >= Y0 and row * 2 + col < len(ITEMS):
+            return ITEMS[row * 2 + col]
         return None
 
     def option_items(self):
@@ -136,6 +171,12 @@ class ToolBox(Gtk.DrawingArea):
         if ev.button != 1:
             return True
         tool = self.tool_at(ev.x, ev.y)
+        if tool in ACTIONS:
+            # Undo and Redo are push buttons: they act on release over the button.
+            if self.action_enabled(tool):
+                self.action_down = tool
+                self.queue_draw()
+            return True
         if tool:
             self.state.set_tool(tool)
             return True
@@ -158,19 +199,26 @@ class ToolBox(Gtk.DrawingArea):
         return True
 
     def on_release(self, w, ev):
+        name = self.action_down
+        if name is None:
+            return True
+        self.action_down = None
+        self.queue_draw()
+        if self.tool_at(ev.x, ev.y) == name and self.action_enabled(name):
+            self.emit("action", name)
         return True
 
     def on_motion(self, w, ev):
         tool = self.tool_at(ev.x, ev.y)
-        self.emit("hint", TOOL_HELP[tool] if tool else "")
+        self.emit("hint", (ACTION_HELP if tool in ACTIONS else TOOL_HELP)[tool] if tool else "")
         return True
 
     def on_tooltip(self, w, x, y, keyboard, tooltip):
         tool = self.tool_at(x, y)
         if not tool:
             return False
-        tooltip.set_text(TOOL_NAMES[tool])
-        col, row = TOOLS.index(tool) % 2, TOOLS.index(tool) // 2
+        tooltip.set_text(ACTION_NAMES[tool] if tool in ACTIONS else TOOL_NAMES[tool])
+        col, row = ITEMS.index(tool) % 2, ITEMS.index(tool) // 2
         rect = Gdk.Rectangle()
         rect.x, rect.y, rect.width, rect.height = X0 + col * BTN, Y0 + row * BTN, BTN, BTN
         tooltip.set_tip_area(rect)
@@ -191,6 +239,26 @@ class ToolBox(Gtk.DrawingArea):
                 win98.raised(cr, x, y, BTN, BTN)
             off = 1 if active else 0
             pixmaps.paint(cr, tool, x + 4 + off, y + 4 + off)
+        for i, name in enumerate(ACTIONS, len(TOOLS)):
+            col, row = i % 2, i // 2
+            x, y = X0 + col * BTN, Y0 + row * BTN
+            down = self.action_down == name
+            if down:
+                win98.pressed(cr, x, y, BTN, BTN)
+            else:
+                win98.raised(cr, x, y, BTN, BTN)
+            icon = _action_icon(name)
+            if self.action_enabled(name):
+                off = 1 if down else 0
+                cr.set_source_surface(icon, x + 4 + off, y + 4 + off)
+                cr.get_source().set_filter(cairo.FILTER_NEAREST)
+                cr.paint()
+            else:
+                # Classic embossed look: white offset copy, then gray glyph.
+                cr.set_source_rgb(1, 1, 1)
+                cr.mask_surface(icon, x + 5, y + 5)
+                cr.set_source_rgb(0.5, 0.5, 0.5)
+                cr.mask_surface(icon, x + 4, y + 4)
 
         win98.sunken_thin(cr, OPT_X, OPT_Y, OPT_W, OPT_H)
         self.draw_options(cr)

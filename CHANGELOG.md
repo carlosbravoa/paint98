@@ -5,6 +5,15 @@ next snap release.
 
 ## Unreleased
 
+- Gradient fills: dragging now only traces the direction (a dashed line
+  from a start marker to an end marker, plus the reach circle for radial
+  gradients); the area is filled once, when the button is released. This
+  also removes the slowdown of redrawing the whole fill on every move.
+- The tool box has Undo and Redo buttons in its bottom row.
+- A single click on the foreground or background swatch opens Edit Colors.
+- Edit Colors always shows the colour spectrum and the Hue/Sat/Lum and
+  Red/Green/Blue fields; the "Define Custom Colors >>" button is gone.
+
 ## 1.0.3
 
 - Ctrl + mouse wheel zooms smoothly in and out (100% to 800%, about 20%

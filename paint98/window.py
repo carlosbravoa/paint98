@@ -811,6 +811,10 @@ class MainWindow(Win98Window):
         self.state.connect("options-changed", lambda *a: self.sync_symmetry_checks())
         self.symmetrybar.connect("hint", lambda w, t: self.set_hint(t))
         self.toolbox.connect("open-sticker-book", lambda *a: self.show_sticker_book())
+        self.toolbox.action_enabled = lambda name: (self.doc.can_undo() or self.canvas.tool.is_busy()
+                                                    if name == "undo" else self.doc.can_redo())
+        self.toolbox.connect("action", lambda w, name: self.canvas_undo() if name == "undo" else self.canvas_redo())
+        self.doc.connect("state-changed", lambda *a: self.toolbox.queue_draw())
         self.canvas.connect("selection-changed", self.on_selection_for_book)
         self.refresh_sensitivity()
 

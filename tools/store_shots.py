@@ -208,7 +208,6 @@ def run(app):
     sub.popdown()
     from paint98 import dialogs
     dlg = dialogs.EditColorsDialog(win, (255, 128, 64), custom=list(CRAYONS) + [(255, 255, 255)] * 14)
-    dlg.on_define()
     dlg.show_all()
     pump(600)
     dlg_img = grab(dlg)

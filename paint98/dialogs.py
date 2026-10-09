@@ -401,8 +401,6 @@ class EditColorsDialog(Win98Dialog):
         hex_row.pack_start(self.hex_entry, False, False, 0)
         hex_row.pack_start(self.hex_swatch, False, False, 0)
         left.pack_start(hex_row, False, False, 6)
-        self.define_btn = make_button("_Define Custom Colors >>", self.on_define)
-        left.pack_start(self.define_btn, False, False, 4)
         bb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         ok = make_button("OK", lambda: self.finish(OK), default=True)
         bb.pack_start(ok, False, False, 0)
@@ -412,7 +410,6 @@ class EditColorsDialog(Win98Dialog):
         outer.pack_start(left, False, False, 0)
 
         self.right = self._build_custom_panel()
-        self.right.set_no_show_all(True)
         outer.pack_start(self.right, False, False, 0)
         self.content.pack_start(outer, True, True, 0)
 
@@ -524,11 +521,6 @@ class EditColorsDialog(Win98Dialog):
         if grid is self.custom_grid:
             self.custom_index = i
         self._set_rgb(grid.colors[i])
-
-    def on_define(self):
-        self.right.set_no_show_all(False)
-        self.right.show_all()
-        self.define_btn.set_sensitive(False)
 
     def on_add(self):
         """Put the colour in the selected custom box and move to the next."""

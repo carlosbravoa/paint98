@@ -72,5 +72,5 @@ Status: `[ ]` to do, `[~]` in progress, `[x]` done, `[-]` won't do.
     making the repository public. *(Not needed: the picture isn't a
     copyright problem; it's just no longer tracked.)*
 19. [x] **Hex colour input.** Type or paste `#RRGGBB` (or `#RGB`) in Edit
-    Colors; double-click the foreground/background swatch to edit that colour
+    Colors; click the foreground/background swatch to edit that colour
     directly.
