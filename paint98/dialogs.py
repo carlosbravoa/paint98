@@ -665,8 +665,9 @@ HELP_TOPICS = [
      "show through."),
     ("Working with colors",
      "Left-click a color in the color box to set the foreground color and right-click to "
-     "set the background color. Double-click a color, or click Edit Colors on the Options "
-     "menu, to change it. Use Pick Color to take a color from the picture."),
+     "set the background color. Double-click a color, click the foreground or background "
+     "swatch, or click Edit Colors on the Options menu, to change it. Use Pick Color to "
+     "take a color from the picture."),
     ("Adding text",
      "Click the Text tool, drag a text frame and type. Use the Fonts toolbar to change the "
      "font, size and style. Click outside the frame to place the text on the picture."),

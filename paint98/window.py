@@ -814,7 +814,10 @@ class MainWindow(Win98Window):
         self.toolbox.action_enabled = lambda name: (self.doc.can_undo() or self.canvas.tool.is_busy()
                                                     if name == "undo" else self.doc.can_redo())
         self.toolbox.connect("action", lambda w, name: self.canvas_undo() if name == "undo" else self.canvas_redo())
-        self.doc.connect("state-changed", lambda *a: self.toolbox.queue_draw())
+        # Half-drawn curves, polygons and text boxes can be undone too.
+        for obj, signal in ((self.doc, "state-changed"), (self.canvas, "picture-changed"),
+                            (self.canvas, "text-box-changed"), (self.state, "tool-changed")):
+            obj.connect(signal, lambda *a: self.toolbox.refresh_actions())
         self.canvas.connect("selection-changed", self.on_selection_for_book)
         self.refresh_sensitivity()
 

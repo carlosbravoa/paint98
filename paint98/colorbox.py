@@ -25,7 +25,7 @@ class ColorBox(Gtk.DrawingArea):
         "edit-color": (GObject.SignalFlags.RUN_FIRST, None, (int,)),
         # The palette cell last clicked (used by Options > Edit Colors).
         "palette-index": (GObject.SignalFlags.RUN_FIRST, None, (int,)),
-        # Double-click on the foreground ("fg") or background ("bg") swatch.
+        # Click on the foreground ("fg") or background ("bg") swatch.
         "edit-indicator": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
         "hint": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
     }

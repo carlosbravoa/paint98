@@ -43,34 +43,6 @@ def _airbrush_dots(size, seed):
 
 AIR_DOTS = [_airbrush_dots(s, i) for i, s in enumerate(AIRBRUSH_SIZES)]
 
-UNDO_ARROW = [
-    "................",
-    "................",
-    "................",
-    "....k...........",
-    "...kk...........",
-    "..kkkkkkkkk.....",
-    ".kkkkkkkkkkk....",
-    "..kkkkkkkkkkk...",
-    "...kk......kkk..",
-    "....k.......kk..",
-    "............kk..",
-    "............kk..",
-    "...........kk...",
-    "..........kk....",
-    "................",
-    "................",
-]
-ACTION_ICONS = {}
-
-
-def _action_icon(name):
-    if name not in ACTION_ICONS:
-        rows = UNDO_ARROW if name == "undo" else [r[::-1] for r in UNDO_ARROW]
-        ACTION_ICONS[name] = pixmaps.make_surface(rows)
-    return ACTION_ICONS[name]
-
-
 class ToolBox(Gtk.DrawingArea):
     __gsignals__ = {
         "hint": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
@@ -84,6 +56,7 @@ class ToolBox(Gtk.DrawingArea):
         self.pressed = None
         self.action_down = None
         self.action_enabled = lambda name: True
+        self.shown_enabled = None
         self.set_size_request(WIDTH, OPT_Y + OPT_H + 4)
         self.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK
                         | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK)
@@ -99,6 +72,13 @@ class ToolBox(Gtk.DrawingArea):
         state.connect("colors-changed", lambda *a: self.queue_draw())
 
     # -- geometry ------------------------------------------------------------
+    def refresh_actions(self):
+        """Redraw when Undo or Redo becomes enabled or disabled."""
+        enabled = tuple(self.action_enabled(name) for name in ACTIONS)
+        if enabled != self.shown_enabled:
+            self.shown_enabled = enabled
+            self.queue_draw()
+
     def tool_at(self, x, y):
         col = int((x - X0) // BTN)
         row = int((y - Y0) // BTN)
@@ -247,18 +227,8 @@ class ToolBox(Gtk.DrawingArea):
                 win98.pressed(cr, x, y, BTN, BTN)
             else:
                 win98.raised(cr, x, y, BTN, BTN)
-            icon = _action_icon(name)
-            if self.action_enabled(name):
-                off = 1 if down else 0
-                cr.set_source_surface(icon, x + 4 + off, y + 4 + off)
-                cr.get_source().set_filter(cairo.FILTER_NEAREST)
-                cr.paint()
-            else:
-                # Classic embossed look: white offset copy, then gray glyph.
-                cr.set_source_rgb(1, 1, 1)
-                cr.mask_surface(icon, x + 5, y + 5)
-                cr.set_source_rgb(0.5, 0.5, 0.5)
-                cr.mask_surface(icon, x + 4, y + 4)
+            off = 1 if down else 0
+            pixmaps.paint(cr, name.upper(), x + 4 + off, y + 4 + off, disabled=not self.action_enabled(name))
 
         win98.sunken_thin(cr, OPT_X, OPT_Y, OPT_W, OPT_H)
         self.draw_options(cr)
